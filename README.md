@@ -29,10 +29,19 @@ e-ink des V4. Sur les V4, le type de FEM est vérifié au démarrage (même
 détection que MeshCore, via le niveau de repos de la broche CSD) : un V4 ≤ 4.2
 flashé par erreur s'arrête sur « Carte incompatible » sans jamais émettre.
 
+Sur le T-Beam Supreme, seule la déclinaison SX1262 (868 MHz) est gérée (ni
+LR1121, ni 2,4 GHz). Le PMU AXP2101 y alimente la radio et l'écran : le
+firmware n'allume que ces rails (GNSS, carte SD et connecteurs restent
+éteints) et règle la charge de la 18650 à 500 mA. Le bouton PWR du PMU
+éteint l'appareil (appui de 4 s) ; le bouton utilisateur est celui du
+milieu (GPIO0).
+
 ## Flasher une release
 
 Des binaires prêts à flasher sont publiés pour chaque tag `vX.Y.Z` (onglet
-*Releases*). Le plus simple : l'outil web [flasher.meshcore.io](https://flasher.meshcore.io),
+*Releases*). Un tag avec suffixe (`vX.Y.Z-rc1`, `vX.Y.Z-tbeam.1`...) produit
+les mêmes binaires en *pre-release*, pour les tests : ils restent
+téléchargeables par tout le monde sans être présentés comme version stable. Le plus simple : l'outil web [flasher.meshcore.io](https://flasher.meshcore.io),
 en choisissant « Custom Firmware » tout en bas de la liste des modèles de
 cartes (les alternatives esptool / UF2 sont dans les notes de release). La
 version (`git describe`) est injectée au build et s'affiche au démarrage
