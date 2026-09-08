@@ -19,6 +19,7 @@ de Tutoduino, préconisé pour l'évènement
 | `heltec_v4_3`    | Heltec WiFi LoRa 32 V4.3       | ESP32-S3R2 | SX1262 + FEM     | SSD1306 128×64 | 1 bouton (PRG)   | 20 / 20 dBm     |
 | `heltec_v4_r8`   | Heltec WiFi LoRa 32 V4 « R8 »  | ESP32-S3R8 | SX1262 + FEM     | SSD1306 128×64 | 1 bouton (PRG)   | 20 / 20 dBm     |
 | `heltec_t096`    | Heltec T096                    | nRF52840   | SX1262 + FEM     | ST7735 160×80  | 1 bouton         | 22 / 22 dBm     |
+| `tbeam_supreme`  | LilyGo T-Beam Supreme (868)    | ESP32-S3   | SX1262           | SH1106 128×64  | 1 bouton         | 22 / 22 dBm     |
 
 Sur les cartes à FEM (V4.3, V4 R8, T096), la puissance est exprimée « à
 l'antenne » : le gain du KCT8103L en émission (~12 dB sur les V4, ~13 dB sur
@@ -76,8 +77,9 @@ RSSI instantané, évaluation continue et non intrusive) ; le SNR du dernier
 paquet est centré sous le RSSI.
 
 - **Ping TRACE** : appui court sur Ok (joystick sur le L1, bouton PRG sur les
-  Heltec).
-- **Menu** : bouton Menu sur le L1, appui long sur PRG sur les Heltec.
+  Heltec, bouton du milieu sur le T-Beam).
+- **Menu** : bouton Menu sur le L1, appui long sur le bouton unique des
+  Heltec et du T-Beam.
 
 Quatre réglages, persistés (NVS sur ESP32, LittleFS interne sur nRF52) :
 
@@ -132,7 +134,8 @@ radio, boutons, bornes de puissance). L'application ne voit que l'interface
 ### Ajouter une carte
 
 1. créer `src/hal/boards/BoardMaCarte.cpp` (implémentation de `Board`,
-   gardée par `#ifdef BOARD_MA_CARTE`) ;
+   gardée par `#ifdef BOARD_MA_CARTE`) et ajouter le drapeau à la liste
+   vérifiée en tête de `src/main.cpp` ;
 2. ajouter un `[env:ma_carte]` dans `platformio.ini` avec
    `-D BOARD_MA_CARTE` — et, si la carte n'est pas connue de PlatformIO,
    sa définition dans `boards/` (+ variante dans `variants/`).
