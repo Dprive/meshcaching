@@ -5,8 +5,8 @@
 
 // Choix des mesures de signal affichées sur l'écran principal
 enum class RssiDisplayMode : uint8_t {
-  kBoth = 0,      // RSSI moyen et despreader côte à côte — défaut
-  kRssiOnly = 1,  // RSSI moyen seul, en grand
+  kBoth = 0,      // RSSI moyen et despreader côte à côte
+  kRssiOnly = 1,  // RSSI moyen seul, en grand — défaut
   kDespreadOnly = 2,  // RSSI du despreader seul, en grand
 };
 

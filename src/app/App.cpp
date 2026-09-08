@@ -30,7 +30,7 @@ void App::loadSettings() {
            sizeof(_settings.targetPrefix));
     _settings.txPowerDbm = _board.txPowerDefaultDbm();
     _settings.rxGainMode = RxGainMode::kSxBoost;
-    _settings.rssiDisplay = RssiDisplayMode::kBoth;
+    _settings.rssiDisplay = RssiDisplayMode::kRssiOnly;
   }
   // Garde-fous, notamment si la config vient d'une autre carte
   if (_settings.txPowerDbm > _board.txPowerMaxDbm()) {
@@ -43,7 +43,7 @@ void App::loadSettings() {
     _settings.rxGainMode = RxGainMode::kSxBoost;
   }
   if ((uint8_t)_settings.rssiDisplay > (uint8_t)RssiDisplayMode::kDespreadOnly) {
-    _settings.rssiDisplay = RssiDisplayMode::kBoth;
+    _settings.rssiDisplay = RssiDisplayMode::kRssiOnly;
   }
 }
 
