@@ -248,10 +248,15 @@ public:
     // ce convertisseur et s'en remet à son état de sortie de reset, ce
     // qui ne suffit pas à tous les contrôleurs compatibles SH1106 : on
     // l'active explicitement, écran éteint comme le demande le SH1106,
-    // avec les réglages de la bibliothèque Adafruit SH110X qu'utilise
-    // MeshCore sur cette carte (pompe à 9 V, contraste maximal).
+    // et on reprend les réglages de la bibliothèque Adafruit SH110X
+    // qu'utilise MeshCore sur cette carte : pompe à 9 V, contraste
+    // maximal, et période de pré-charge 0x1F — sur le SH1106 les deux
+    // quartets de cette commande sont inversés par rapport au SSD1306,
+    // le 0xF1 de U8g2 y vaut une pré-charge minimale.
     _u8g2.setPowerSave(1);
-    _u8g2.sendF("cac", 0xAD, 0x8B, 0x33);  // DC-DC ON, VPP 9 V
+    _u8g2.sendF("cacac", 0xAD, 0x8B,  // DC-DC ON
+                0xD9, 0x1F,           // pré-charge 15 DCLK, décharge 1
+                0x33);                // VPP 9 V
     _u8g2.setContrast(0xFF);
     _u8g2.setPowerSave(0);
 
