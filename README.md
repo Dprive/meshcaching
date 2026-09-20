@@ -10,8 +10,6 @@ Firmware compagnon de l'article
 de Tutoduino, préconisé pour l'évènement
 [MeshCaching Île-de-France](https://tutoduino.fr/blog/meshcaching/).
 
-Le [firmware de base](https://github.com/tutoduino/meshcaching_arduino_ide) a été initialement conçu pour le Heltec V3 sous IDE Arduino.
-
 ## Cartes supportées
 
 | Environnement    | Carte                          | MCU        | Radio            | Écran          | Boutons          | TX défaut / max |
@@ -153,7 +151,7 @@ radio, boutons, bornes de puissance). L'application ne voit que l'interface
 
 ## Crédits
 
-- Sketch d'origine : [Tutoduino](https://tutoduino.fr/menu-sdr/geolocalisation-repeteur-meshcore/)
+- Sketch d'origine : [Tutoduino](https://github.com/tutoduino/meshcaching_arduino_ide)
 - Définitions de cartes et brochages : firmware
   [MeshCore](https://github.com/meshcore-dev/MeshCore) (licence MIT),
   cf. `boards/README.md`
