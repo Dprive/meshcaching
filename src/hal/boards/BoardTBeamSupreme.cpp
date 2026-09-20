@@ -37,22 +37,50 @@ constexpr uint8_t kPinPmuScl = 41;
 constexpr uint8_t kPmuI2cAddress = 0x34;
 constexpr uint8_t kPinButtonUser = 0;  // relié à la masse quand pressé
 
+// Adresse I2C de l'OLED selon la variante radio (schéma LilyGo V3.1)
+constexpr uint8_t kOledAddrUhf = 0x3D;  // SX1262 868/915 MHz
+constexpr uint8_t kOledAddrVhf = 0x3C;
+
 const ButtonSpec kButtons[] = {
     {Key::Ok, kPinButtonUser, /*activeLow=*/true, /*internalPullup=*/true},
 };
+
+// Libère un bus I2C dont un esclave maintient SDA bas (transaction
+// interrompue par un reset) : on cadence SCL jusqu'à ce qu'il lâche la
+// ligne, puis on émet un STOP. À faire avant que Wire ne prenne les broches.
+void recoverI2cBus(uint8_t sda, uint8_t scl) {
+  pinMode(sda, INPUT_PULLUP);
+  pinMode(scl, OUTPUT_OPEN_DRAIN);
+  digitalWrite(scl, HIGH);
+  delayMicroseconds(5);
+  for (int i = 0; i < 9 && digitalRead(sda) == LOW; i++) {
+    digitalWrite(scl, LOW);
+    delayMicroseconds(5);
+    digitalWrite(scl, HIGH);
+    delayMicroseconds(5);
+  }
+  pinMode(sda, OUTPUT_OPEN_DRAIN);  // STOP : SDA bas -> haut, SCL haut
+  digitalWrite(sda, LOW);
+  delayMicroseconds(5);
+  digitalWrite(sda, HIGH);
+  delayMicroseconds(5);
+  pinMode(sda, INPUT);
+  pinMode(scl, INPUT);
+}
+
+bool i2cAck(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return Wire.endTransmission() == 0;
+}
 
 class TBeamSupremeBoard : public Board {
 public:
   const char *name() const override { return "LilyGo T-Beam Supreme"; }
 
   void initPower() override {
-    // Bus de l'OLED : rien d'autre ne l'initialise sur cette carte, et le
-    // sondage d'adresse de beginDisplay() en a besoin — y compris pour
-    // afficher l'erreur si le PMU ne répond pas.
-    Wire.begin(kPinOledSda, kPinOledScl);
-
     if (!_pmu.init(Wire1, kPinPmuSda, kPinPmuScl, kPmuI2cAddress)) {
       _selfCheckError = "PMU AXP2101 absent";
+      Wire.begin(kPinOledSda, kPinOledScl);  // pour tenter d'afficher l'erreur
       return;  // sans PMU, rien n'est alimenté : l'appli s'arrêtera là
     }
     // Les rails se pilotent via l'interface générique (canaux XPOWERS_*),
@@ -104,6 +132,19 @@ public:
     _pmu.setPowerKeyPressOffTime(XPOWERS_POWEROFF_4S);
 
     delay(150);  // stabilisation des rails avant l'init de l'OLED
+
+    Serial.printf("PMU AXP2101 : ALDO1 %u mV (OLED), ALDO3 %u mV (LoRa), "
+                  "VBUS %s, batterie %u mV\n",
+                  (unsigned)pmu.getPowerChannelVoltage(XPOWERS_ALDO1),
+                  (unsigned)pmu.getPowerChannelVoltage(XPOWERS_ALDO3),
+                  _pmu.isVbusIn() ? "oui" : "non",
+                  (unsigned)_pmu.getBattVoltage());
+
+    // Bus de l'OLED, démarré seulement maintenant : ses pull-ups sont sur
+    // ALDO1. Un esclave resté bloqué mi-transaction (SDA maintenu bas —
+    // les capteurs partagent le bus) est d'abord libéré à la main.
+    recoverI2cBus(kPinOledSda, kPinOledScl);
+    Wire.begin(kPinOledSda, kPinOledScl);
   }
 
   const char *selfCheckError() const override { return _selfCheckError; }
@@ -111,13 +152,30 @@ public:
   Display &display() override { return _display; }
 
   void beginDisplay() override {
-    // SA0 de l'OLED varie selon les révisions de la carte : 0x3C le plus
-    // souvent, 0x3D parfois — on sonde avant d'initialiser.
-    uint8_t addr = 0x3C;
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() != 0) {
-      addr = 0x3D;
+    // L'adresse de l'OLED dépend de la variante radio de la carte
+    // (schéma LilyGo V3.1, strap R51/R52) : 0x3D sur la version UHF —
+    // la nôtre, SX1262 —, 0x3C sur la version VHF. On privilégie 0x3D :
+    // le magnétomètre partage le bus et certaines références répondent
+    // en 0x3C, ce qui ferait initialiser l'écran à la mauvaise adresse.
+    // L'OLED vient d'être mis sous tension : on lui laisse une fenêtre
+    // pour répondre avant de se rabattre.
+    uint8_t addr = kOledAddrUhf;
+    bool ackUhf = false, ackVhf = false;
+    uint32_t deadline = millis() + 1000;
+    while (millis() < deadline) {
+      if (i2cAck(kOledAddrUhf)) {
+        ackUhf = true;
+        break;
+      }
+      ackVhf = ackVhf || i2cAck(kOledAddrVhf);
+      delay(20);
     }
+    if (!ackUhf && ackVhf) {
+      addr = kOledAddrVhf;
+    }
+    Serial.printf("OLED : %s -> adresse 0x%02X\n",
+                  ackUhf ? "0x3D répond" : ackVhf ? "0x3C répond" : "aucune réponse I2C",
+                  addr);
     _u8g2.setI2CAddress(addr << 1);  // U8g2 attend l'adresse 8 bits
     _display.begin();
   }
