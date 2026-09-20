@@ -99,16 +99,79 @@ void describeOledStatus(int status, char *buf, size_t len) {
   }
 }
 
-// Inventaire d'un bus I2C sur le port série (diagnostic)
-void logI2cScan(const char *label, TwoWire &bus) {
+// Horodatage (ms depuis le boot) en tête des lignes de diagnostic, pour
+// situer où passe le temps au démarrage.
+void logTs() { Serial.printf("[%6lu] ", (unsigned long)millis()); }
+
+const char *wireErrorName(uint8_t err) {
+  switch (err) {
+    case 0: return "OK";
+    case 2: return "NACK on address";
+    case 3: return "NACK on data";
+    case 5: return "timeout";
+    default: return "error";
+  }
+}
+
+// Envoie la commande NOP (0xE3, SSD1306 comme SH1106) : vérifie que
+// l'OLED accepte encore des commandes. Renvoie le code d'erreur Wire.
+uint8_t i2cOledNop(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  Wire.write((uint8_t)0x00);
+  Wire.write((uint8_t)0xE3);
+  return Wire.endTransmission();
+}
+
+struct KnownI2cDevice {
+  uint8_t addr;
+  const char *what;
+};
+// Ce que les schémas placent sur chaque bus, selon la révision
+const KnownI2cDevice kWireDevices[] = {
+    {0x1C, "QMC6310U"}, {0x3C, "OLED or QMC6310N"}, {0x3D, "OLED"},
+    {0x76, "BME280"},   {0x77, "BME280"},           {0x7C, "QMC6309"},
+};
+const KnownI2cDevice kWire1Devices[] = {{0x34, "AXP2101"}, {0x51, "PCF8563"}};
+
+// Inventaire des adresses connues d'un bus (diagnostic)
+void logI2cScan(const char *label, TwoWire &bus, const KnownI2cDevice *devices,
+                size_t count) {
+  logTs();
   Serial.printf("I2C %s:", label);
   bool any = false;
-  for (uint8_t addr = 0x08; addr < 0x80; addr++) {
-    if (!i2cAck(bus, addr)) continue;
-    Serial.printf(" 0x%02X", addr);
+  for (size_t i = 0; i < count; i++) {
+    if (!i2cAck(bus, devices[i].addr)) continue;
+    Serial.printf(" 0x%02X (%s)", devices[i].addr, devices[i].what);
     any = true;
   }
-  Serial.println(any ? "" : " no device");
+  Serial.println(any ? "" : " no known device");
+}
+
+// Durée réelle de quelques opérations élémentaires, pour distinguer une
+// tâche affamée, une horloge fausse, un bus I2C lent ou un port série
+// bloquant.
+void logTimingProbes() {
+  uint32_t t0 = micros();
+  delay(100);
+  uint32_t dDelay = micros() - t0;
+  t0 = micros();
+  volatile uint32_t acc = 0;
+  for (uint32_t i = 0; i < 1000000; i++) acc += i;
+  uint32_t dLoop = micros() - t0;
+  t0 = micros();
+  Serial.println("Timing: reference line of eighty characters, used to time one serial write");
+  uint32_t dSerial = micros() - t0;
+  t0 = micros();
+  i2cAck(Wire, 0x08);  // adresse libre : NACK attendu
+  uint32_t dNack = micros() - t0;
+  t0 = micros();
+  i2cAck(Wire1, kPmuI2cAddress);  // le PMU : ACK attendu
+  uint32_t dAck = micros() - t0;
+  logTs();
+  Serial.printf("Timing: delay(100) %lu us, 1M loop %lu us, serial line %lu us, "
+                "I2C NACK %lu us, I2C ACK %lu us\n",
+                (unsigned long)dDelay, (unsigned long)dLoop, (unsigned long)dSerial,
+                (unsigned long)dNack, (unsigned long)dAck);
 }
 
 void logRail(XPowersLibInterface &pmu, const char *name, uint8_t channel,
@@ -131,6 +194,8 @@ public:
       Wire.begin(kPinOledSda, kPinOledScl);  // pour tenter d'afficher l'erreur
       return;  // sans PMU, rien n'est alimenté : l'appli s'arrêtera là
     }
+    logTs();
+    Serial.println("PMU AXP2101 found");
     // Les rails se pilotent via l'interface générique (canaux XPOWERS_*),
     // seule voie publique de XPowersLib pour ces opérations.
     XPowersLibInterface &pmu = _pmu;
@@ -182,6 +247,7 @@ public:
     delay(150);  // stabilisation des rails avant l'init de l'OLED
 
     // État réel des rails (relu dans le PMU), pour le diagnostic
+    logTs();
     Serial.printf("PMU AXP2101 (ID 0x%02X):", _pmu.getChipID());
     logRail(pmu, "DCDC1", XPOWERS_DCDC1, " (ESP32)");
     logRail(pmu, "ALDO1", XPOWERS_ALDO1, " (OLED)");
@@ -193,7 +259,9 @@ public:
     logRail(pmu, "DCDC3", XPOWERS_DCDC3, "");
     logRail(pmu, "DCDC4", XPOWERS_DCDC4, "");
     logRail(pmu, "DCDC5", XPOWERS_DCDC5, "");
-    Serial.printf("\nPMU: VBUS %s, battery %u mV\n",
+    Serial.println();
+    logTs();
+    Serial.printf("PMU: VBUS %s, battery %u mV\n",
                   _pmu.isVbusIn() ? "yes" : "no",
                   (unsigned)_pmu.getBattVoltage());
 
@@ -209,10 +277,11 @@ public:
   Display &display() override { return _display; }
 
   void beginDisplay() override {
-    // Inventaire des deux bus (diagnostic : révision de la carte, adresses
-    // de l'OLED et du magnétomètre, présence des capteurs)
-    logI2cScan("Wire (OLED, sensors)", Wire);
-    logI2cScan("Wire1 (PMU)", Wire1);
+    logTimingProbes();
+    logI2cScan("Wire (OLED, sensors)", Wire, kWireDevices,
+               sizeof(kWireDevices) / sizeof(kWireDevices[0]));
+    logI2cScan("Wire1 (PMU)", Wire1, kWire1Devices,
+               sizeof(kWire1Devices) / sizeof(kWire1Devices[0]));
 
     // On privilégie 0x3D : sur les cartes où l'OLED y est, le
     // magnétomètre répond en 0x3C et ferait initialiser l'écran à la
@@ -232,15 +301,55 @@ public:
     if (!ackPrimary && ackAlternate) {
       addr = kOledAddrAlternate;
     }
-    char status[48];
-    describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
-    Serial.printf("OLED: %s -> address 0x%02X, status before init %s\n",
+    logTs();
+    Serial.printf("OLED: %s -> address 0x%02X\n",
                   ackPrimary ? "0x3D responds"
                              : ackAlternate ? "0x3C responds" : "no I2C response",
-                  addr, status);
+                  addr);
+
+    // État avant init, puis vérification que cette lecture n'a pas
+    // perturbé l'OLED (sonde NOP) ; on libère le bus au besoin.
+    char status[48];
+    describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
+    uint8_t err = i2cOledNop(addr);
+    logTs();
+    Serial.printf("OLED: status before init %s, NOP probe %s\n", status,
+                  wireErrorName(err));
+    if (err != 0) {
+      recoverI2cBus(kPinOledSda, kPinOledScl);
+      Wire.begin(kPinOledSda, kPinOledScl);
+    }
 
     _u8g2.setI2CAddress(addr << 1);  // U8g2 attend l'adresse 8 bits
-    _display.begin();
+    if (!initOled(addr, 400000)) {
+      // Bus bloqué ou écran resté éteint : on libère le bus et on
+      // recommence à la vitesse standard, que tout esclave supporte.
+      logTs();
+      Serial.println("OLED: retrying at 100 kHz after bus recovery");
+      recoverI2cBus(kPinOledSda, kPinOledScl);
+      Wire.begin(kPinOledSda, kPinOledScl);
+      initOled(addr, 100000);
+    }
+
+    // Coût d'une trame complète (et dernier état du bus avant l'appli)
+    uint32_t t0 = millis();
+    _display.clear();
+    _display.send();
+    uint32_t frameMs = millis() - t0;
+    err = i2cOledNop(addr);
+    logTs();
+    Serial.printf("OLED: blank frame sent in %lu ms at %lu kHz, NOP probe %s\n",
+                  (unsigned long)frameMs, (unsigned long)(_busHz / 1000),
+                  wireErrorName(err));
+  }
+
+  // Initialise l'OLED à la vitesse de bus donnée. Vrai si l'OLED accepte
+  // encore des commandes ensuite et se dit allumé.
+  bool initOled(uint8_t addr, uint32_t busHz) {
+    uint32_t t0 = millis();
+    _busHz = busHz;
+    _u8g2.setBusClock(busHz);
+    _u8g2.begin();
 
     // Le SH1106 fabrique lui-même la haute tension du panneau (pompe de
     // charge interne, condensateurs C1/C2 sur la nappe de l'écran). La
@@ -259,9 +368,22 @@ public:
                 0x33);                // VPP 9 V
     _u8g2.setContrast(0xFF);
     _u8g2.setPowerSave(0);
+    uint32_t initMs = millis() - t0;
 
-    describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
-    Serial.printf("OLED: status after init %s\n", status);
+    uint8_t err = i2cOledNop(addr);
+    int status = -1;
+    char statusText[48];
+    if (err == 0) {
+      status = i2cReadByte0(Wire, addr);
+      describeOledStatus(status, statusText, sizeof(statusText));
+    } else {
+      snprintf(statusText, sizeof(statusText), "not read");
+    }
+    logTs();
+    Serial.printf("OLED: init at %lu kHz took %lu ms, NOP probe %s, status %s\n",
+                  (unsigned long)(busHz / 1000), (unsigned long)initMs,
+                  wireErrorName(err), statusText);
+    return err == 0 && status >= 0 && (status & 0x40) == 0;
   }
 
   RadioTraits radio() const override {
@@ -288,6 +410,7 @@ public:
 
 private:
   const char *_selfCheckError = nullptr;
+  uint32_t _busHz = 0;
   XPowersAXP2101 _pmu;
   U8G2_SH1106_128X64_NONAME_F_HW_I2C _u8g2{U8G2_R0, U8X8_PIN_NONE,
                                            kPinOledScl, kPinOledSda};
