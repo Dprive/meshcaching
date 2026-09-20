@@ -9,7 +9,8 @@
 // AXP2101 (I2C, bus Wire1 sur GPIO42/41) — sans lui, ni la radio ni
 // l'écran ne sont alimentés. Brochage et affectation des rails repris du
 // firmware MeshCore (helpers/esp32/TBeamBoard.*) et des exemples LilyGo
-// (LilyGo-LoRa-Series, utilities.h / LoRaBoards.cpp).
+// (LilyGo-LoRa-Series, utilities.h / LoRaBoards.cpp), vérifiés sur les
+// schémas LilyGo (T-Beam-S3-Core, T-Beam Supreme V3.0 et V3.1).
 // =====================================================================
 #include <U8g2lib.h>
 #include <Wire.h>
@@ -28,7 +29,8 @@ constexpr uint8_t kPinLoraReset = 5;
 constexpr uint8_t kPinLoraBusy = 4;
 constexpr uint8_t kPinLoraDio1 = 1;
 
-// Bus I2C principal (Wire) : OLED (+ BME280 et magnétomètre, inutilisés)
+// Bus I2C principal (Wire) : OLED, magnétomètre et BME280 (seul l'OLED
+// nous sert). Ses pull-ups sont sur ALDO1, comme l'OLED.
 constexpr uint8_t kPinOledSda = 17;
 constexpr uint8_t kPinOledScl = 18;
 // Bus I2C secondaire (Wire1) : PMU AXP2101 (+ RTC PCF8563, inutilisée)
@@ -37,9 +39,12 @@ constexpr uint8_t kPinPmuScl = 41;
 constexpr uint8_t kPmuI2cAddress = 0x34;
 constexpr uint8_t kPinButtonUser = 0;  // relié à la masse quand pressé
 
-// Adresse I2C de l'OLED selon la variante radio (schéma LilyGo V3.1)
-constexpr uint8_t kOledAddrUhf = 0x3D;  // SX1262 868/915 MHz
-constexpr uint8_t kOledAddrVhf = 0x3C;
+// Adresses I2C possibles de l'OLED. Elle change avec la révision de la
+// carte, selon le magnétomètre qui partage le bus (doc LilyGo
+// t_beam_supreme_hw.md) : QMC6310N en 0x3C -> OLED en 0x3D ; QMC6310U
+// (0x1C, V3.0) ou QMC6309 (0x7C, V3.1) -> OLED en 0x3C.
+constexpr uint8_t kOledAddrPrimary = 0x3D;
+constexpr uint8_t kOledAddrAlternate = 0x3C;
 
 const ButtonSpec kButtons[] = {
     {Key::Ok, kPinButtonUser, /*activeLow=*/true, /*internalPullup=*/true},
@@ -68,9 +73,52 @@ void recoverI2cBus(uint8_t sda, uint8_t scl) {
   pinMode(scl, INPUT);
 }
 
-bool i2cAck(uint8_t addr) {
-  Wire.beginTransmission(addr);
-  return Wire.endTransmission() == 0;
+bool i2cAck(TwoWire &bus, uint8_t addr) {
+  bus.beginTransmission(addr);
+  return bus.endTransmission() == 0;
+}
+
+// Lit un octet après avoir écrit 0x00 : sur un OLED SH1106/SSD1306 c'est
+// l'octet d'état (bit 6 = écran éteint, bit 7 = occupé), sur un QMC6310
+// son identifiant (0x80). Renvoie -1 sans réponse. Diagnostic seulement.
+int i2cReadByte0(TwoWire &bus, uint8_t addr) {
+  bus.beginTransmission(addr);
+  bus.write((uint8_t)0x00);
+  if (bus.endTransmission(false) != 0) return -1;
+  if (bus.requestFrom(addr, (uint8_t)1) != 1) return -1;
+  return bus.read();
+}
+
+void describeOledStatus(int status, char *buf, size_t len) {
+  if (status < 0) {
+    snprintf(buf, len, "sans réponse");
+  } else {
+    snprintf(buf, len, "0x%02X (écran %s%s)", status,
+             (status & 0x40) ? "éteint" : "allumé",
+             (status & 0x80) ? ", occupé" : "");
+  }
+}
+
+// Inventaire d'un bus I2C sur le port série (diagnostic)
+void logI2cScan(const char *label, TwoWire &bus) {
+  Serial.printf("I2C %s :", label);
+  bool any = false;
+  for (uint8_t addr = 0x08; addr < 0x80; addr++) {
+    if (!i2cAck(bus, addr)) continue;
+    Serial.printf(" 0x%02X", addr);
+    any = true;
+  }
+  Serial.println(any ? "" : " aucun périphérique");
+}
+
+void logRail(XPowersLibInterface &pmu, const char *name, uint8_t channel,
+             const char *role) {
+  if (pmu.isPowerChannelEnable(channel)) {
+    Serial.printf(" | %s ON %u mV%s", name,
+                  (unsigned)pmu.getPowerChannelVoltage(channel), role);
+  } else {
+    Serial.printf(" | %s off%s", name, role);
+  }
 }
 
 class TBeamSupremeBoard : public Board {
@@ -87,11 +135,11 @@ public:
     // seule voie publique de XPowersLib pour ces opérations.
     XPowersLibInterface &pmu = _pmu;
 
-    // Rails utiles : ALDO3 alimente le SX1262 ; ALDO1 l'OLED (et le
-    // BME280), ALDO2 le magnétomètre — MeshCore comme LilyGo allument les
-    // deux pour l'écran, on fait de même. Les deux LDO de l'écran sont
-    // coupés puis rallumés au démarrage à froid (recette LilyGo) pour
-    // repartir d'un OLED réinitialisé.
+    // Rails utiles : ALDO3 alimente le SX1262 ; ALDO1 l'OLED (avec les
+    // pull-ups de son bus et le BME280), ALDO2 le magnétomètre — MeshCore
+    // comme LilyGo allument les deux pour l'écran, on fait de même. Les
+    // deux LDO sont coupés puis rallumés au démarrage à froid (recette
+    // LilyGo, reprise par MeshCore) pour repartir d'un OLED réinitialisé.
     if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED) {
       pmu.disablePowerOutput(XPOWERS_ALDO1);
       pmu.disablePowerOutput(XPOWERS_ALDO2);
@@ -105,9 +153,9 @@ public:
     pmu.enablePowerOutput(XPOWERS_ALDO2);
 
     // Rails inutiles ici, coupés pour l'autonomie : GNSS (ALDO4), carte
-    // SD (BLDO1), connecteurs d'extension et M.2 (BLDO2, DCDC3..5),
-    // sauvegarde RTC (VBACKUP). DCDC1 alimente l'ESP32 : ne jamais y
-    // toucher.
+    // SD (BLDO1), connecteurs d'extension et M.2 (BLDO2, DCDC3..5 — rien
+    // d'autre n'y est raccordé d'après les schémas), sauvegarde RTC
+    // (VBACKUP). DCDC1 alimente l'ESP32 : ne jamais y toucher.
     pmu.disablePowerOutput(XPOWERS_ALDO4);
     pmu.disablePowerOutput(XPOWERS_BLDO1);
     pmu.disablePowerOutput(XPOWERS_BLDO2);
@@ -133,10 +181,19 @@ public:
 
     delay(150);  // stabilisation des rails avant l'init de l'OLED
 
-    Serial.printf("PMU AXP2101 : ALDO1 %u mV (OLED), ALDO3 %u mV (LoRa), "
-                  "VBUS %s, batterie %u mV\n",
-                  (unsigned)pmu.getPowerChannelVoltage(XPOWERS_ALDO1),
-                  (unsigned)pmu.getPowerChannelVoltage(XPOWERS_ALDO3),
+    // État réel des rails (relu dans le PMU), pour le diagnostic
+    Serial.printf("PMU AXP2101 (ID 0x%02X) :", _pmu.getChipID());
+    logRail(pmu, "DCDC1", XPOWERS_DCDC1, " (ESP32)");
+    logRail(pmu, "ALDO1", XPOWERS_ALDO1, " (OLED)");
+    logRail(pmu, "ALDO2", XPOWERS_ALDO2, " (capteurs)");
+    logRail(pmu, "ALDO3", XPOWERS_ALDO3, " (LoRa)");
+    logRail(pmu, "ALDO4", XPOWERS_ALDO4, " (GNSS)");
+    logRail(pmu, "BLDO1", XPOWERS_BLDO1, " (SD)");
+    logRail(pmu, "BLDO2", XPOWERS_BLDO2, "");
+    logRail(pmu, "DCDC3", XPOWERS_DCDC3, "");
+    logRail(pmu, "DCDC4", XPOWERS_DCDC4, "");
+    logRail(pmu, "DCDC5", XPOWERS_DCDC5, "");
+    Serial.printf("\nPMU : VBUS %s, batterie %u mV\n",
                   _pmu.isVbusIn() ? "oui" : "non",
                   (unsigned)_pmu.getBattVoltage());
 
@@ -152,32 +209,54 @@ public:
   Display &display() override { return _display; }
 
   void beginDisplay() override {
-    // L'adresse de l'OLED dépend de la variante radio de la carte
-    // (schéma LilyGo V3.1, strap R51/R52) : 0x3D sur la version UHF —
-    // la nôtre, SX1262 —, 0x3C sur la version VHF. On privilégie 0x3D :
-    // le magnétomètre partage le bus et certaines références répondent
-    // en 0x3C, ce qui ferait initialiser l'écran à la mauvaise adresse.
-    // L'OLED vient d'être mis sous tension : on lui laisse une fenêtre
-    // pour répondre avant de se rabattre.
-    uint8_t addr = kOledAddrUhf;
-    bool ackUhf = false, ackVhf = false;
+    // Inventaire des deux bus (diagnostic : révision de la carte, adresses
+    // de l'OLED et du magnétomètre, présence des capteurs)
+    logI2cScan("Wire (OLED, capteurs)", Wire);
+    logI2cScan("Wire1 (PMU)", Wire1);
+
+    // On privilégie 0x3D : sur les cartes où l'OLED y est, le
+    // magnétomètre répond en 0x3C et ferait initialiser l'écran à la
+    // mauvaise adresse. L'OLED vient d'être mis sous tension : on lui
+    // laisse une fenêtre pour répondre avant de se rabattre sur 0x3C.
+    uint8_t addr = kOledAddrPrimary;
+    bool ackPrimary = false, ackAlternate = false;
     uint32_t deadline = millis() + 1000;
     while (millis() < deadline) {
-      if (i2cAck(kOledAddrUhf)) {
-        ackUhf = true;
+      if (i2cAck(Wire, kOledAddrPrimary)) {
+        ackPrimary = true;
         break;
       }
-      ackVhf = ackVhf || i2cAck(kOledAddrVhf);
+      ackAlternate = ackAlternate || i2cAck(Wire, kOledAddrAlternate);
       delay(20);
     }
-    if (!ackUhf && ackVhf) {
-      addr = kOledAddrVhf;
+    if (!ackPrimary && ackAlternate) {
+      addr = kOledAddrAlternate;
     }
-    Serial.printf("OLED : %s -> adresse 0x%02X\n",
-                  ackUhf ? "0x3D répond" : ackVhf ? "0x3C répond" : "aucune réponse I2C",
-                  addr);
+    char status[48];
+    describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
+    Serial.printf("OLED : %s -> adresse 0x%02X, état avant init %s\n",
+                  ackPrimary ? "0x3D répond"
+                             : ackAlternate ? "0x3C répond" : "aucune réponse I2C",
+                  addr, status);
+
     _u8g2.setI2CAddress(addr << 1);  // U8g2 attend l'adresse 8 bits
     _display.begin();
+
+    // Le SH1106 fabrique lui-même la haute tension du panneau (pompe de
+    // charge interne, condensateurs C1/C2 sur la nappe de l'écran). La
+    // séquence d'init SH1106 de U8g2, héritée du SSD1306, ne pilote pas
+    // ce convertisseur et s'en remet à son état de sortie de reset, ce
+    // qui ne suffit pas à tous les contrôleurs compatibles SH1106 : on
+    // l'active explicitement, écran éteint comme le demande le SH1106,
+    // avec les réglages de la bibliothèque Adafruit SH110X qu'utilise
+    // MeshCore sur cette carte (pompe à 9 V, contraste maximal).
+    _u8g2.setPowerSave(1);
+    _u8g2.sendF("cac", 0xAD, 0x8B, 0x33);  // DC-DC ON, VPP 9 V
+    _u8g2.setContrast(0xFF);
+    _u8g2.setPowerSave(0);
+
+    describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
+    Serial.printf("OLED : état après init %s\n", status);
   }
 
   RadioTraits radio() const override {
