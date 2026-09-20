@@ -315,8 +315,7 @@ public:
     Serial.printf("OLED: status before init %s, NOP probe %s\n", status,
                   wireErrorName(err));
     if (err != 0) {
-      recoverI2cBus(kPinOledSda, kPinOledScl);
-      Wire.begin(kPinOledSda, kPinOledScl);
+      restartOledBus();
     }
 
     _u8g2.setI2CAddress(addr << 1);  // U8g2 expects the 8-bit address
@@ -325,8 +324,7 @@ public:
       // the standard speed, which every slave supports.
       logTs();
       Serial.println("OLED: retrying at 100 kHz after bus recovery");
-      recoverI2cBus(kPinOledSda, kPinOledScl);
-      Wire.begin(kPinOledSda, kPinOledScl);
+      restartOledBus();
       initOled(addr, 100000);
     }
 
@@ -340,6 +338,15 @@ public:
     Serial.printf("OLED: blank frame sent in %lu ms at %lu kHz, NOP probe %s\n",
                   (unsigned long)frameMs, (unsigned long)(_busHz / 1000),
                   wireErrorName(err));
+  }
+
+  // Restarts the OLED bus from scratch: Wire.begin() is a no-op once the
+  // bus is running, so the peripheral is torn down first, the lines are
+  // freed by hand, then the bus is configured again.
+  void restartOledBus() {
+    Wire.end();
+    recoverI2cBus(kPinOledSda, kPinOledScl);
+    Wire.begin(kPinOledSda, kPinOledScl);
   }
 
   // Initializes the OLED at the given bus speed. True if the OLED still
@@ -410,8 +417,14 @@ private:
   const char *_selfCheckError = nullptr;
   uint32_t _busHz = 0;
   XPowersAXP2101 _pmu;
-  U8G2_SH1106_128X64_NONAME_F_HW_I2C _u8g2{U8G2_R0, U8X8_PIN_NONE,
-                                           kPinOledScl, kPinOledSda};
+  // No pin numbers here, on purpose: Wire is started in initPower() (the
+  // PMU sequencing and the probes need it before the display exists), and
+  // when U8g2 is given the I2C pins its Arduino GPIO init calls
+  // pinMode(OUTPUT) on them, which on the ESP32 detaches them from the I2C
+  // peripheral (plain GPIO outputs, driven low): the bus is dead from then
+  // on, and the Wire.begin() U8g2 does next is a no-op on a running bus.
+  // With U8X8_PIN_NONE, U8g2 leaves the pins alone and reuses the bus.
+  U8G2_SH1106_128X64_NONAME_F_HW_I2C _u8g2{U8G2_R0, U8X8_PIN_NONE};
   U8g2Display _display{_u8g2};
 };
 
