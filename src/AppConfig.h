@@ -2,58 +2,58 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// Version du firmware, injectée par scripts/version.py (git describe)
+// Firmware version, injected by scripts/version.py (git describe)
 #ifndef MESHCACHING_VERSION
 #define MESHCACHING_VERSION "dev"
 #endif
 
 // =====================================================================
-// Configuration de l'application, identique pour toutes les cartes.
-// Ce qui dépend du matériel vit dans src/hal/boards/.
+// Application configuration, identical for every board.
+// Whatever depends on the hardware lives in src/hal/boards/.
 // =====================================================================
 namespace config {
 
-// Durée de l'écran de démarrage (MESHCACHING + version)
+// Splash screen duration (MESHCACHING + version)
 constexpr uint32_t kSplashMs = 3000;
 
-// --- Paramètres radio : preset MeshCore Île-de-France ---
+// --- Radio settings: MeshCore EU Narrow preset ---
 constexpr float kLoraFreqMhz = 869.618f;
 constexpr float kLoraBwKhz = 62.5f;
 constexpr uint8_t kLoraSf = 8;
 constexpr uint8_t kLoraCr = 8;
-// La puissance TX (défaut et maxi) est propre à chaque carte : cf. Board.
+// TX power (default and max) is specific to each board: see Board.
 
-// Préfixe de la clé publique du répéteur MeshCore visé — valeur d'usine
-// au premier démarrage, modifiable ensuite via le menu (persisté).
+// Public key prefix of the targeted MeshCore repeater - factory value
+// on first boot, then editable from the menu (persisted).
 constexpr uint8_t kTargetPubkeyPrefix[] = { 0x57, 0xDB };
 
-// On n'accepte une réponse TRACE que dans les 10 s suivant notre ping
+// A TRACE reply is only accepted within 10 s of our ping
 constexpr uint32_t kTraceReplyTimeoutMs = 10000;
 
-// Délai minimal entre deux émissions TRACE
+// Minimum delay between two TRACE transmissions
 constexpr uint32_t kTxCooldownMs = 5000;
 
-// Durée d'affichage du témoin d'émission "TX"
+// Display duration of the "TX" transmit indicator
 constexpr uint32_t kTxIndicatorMs = 700;
 
-// LBT (écoute avant émission, CAD du SX126x) : canal occupé -> nouvel
-// essai après un slot court aléatoire, abandon à la deadline — pas de
-// TX forcé, contrairement à MeshCore (même deadline qu'eux).
+// LBT (listen before talk, SX126x CAD): channel busy -> retry after a
+// short random slot, give up at the deadline - no forced TX, unlike
+// MeshCore (same deadline as theirs).
 constexpr uint32_t kLbtDeadlineMs = 4000;
 constexpr uint32_t kLbtSlotMinMs = 100;
 constexpr uint32_t kLbtSlotMaxMs = 300;
-// Durée d'affichage du témoin "OCCUPÉ" après un abandon LBT
+// Display duration of the "OCCUPÉ" indicator after an LBT give-up
 constexpr uint32_t kLbtBusyMsgMs = 2000;
 
-// Bruit de fond : cadence d'échantillonnage du RSSI instantané (la
-// médiane par cycle de 64 est dans NoiseFloor)
+// Noise floor: sampling rate of the instantaneous RSSI (the median
+// over each cycle of 64 lives in NoiseFloor)
 constexpr uint32_t kNoiseSampleIntervalMs = 20;
 
-// Clignotement quand une réponse valide vient de rafraîchir le RSSI :
-// une seule inversion de l'écran, de cette durée.
+// Blink when a valid reply has just refreshed the RSSI: a single
+// inversion of the screen, lasting this long.
 constexpr uint32_t kRxFlashMs = 150;
 
-// Cadence de rafraîchissement de l'écran principal (animations, barre)
+// Refresh rate of the main screen (animations, bar)
 constexpr uint32_t kDisplayRefreshMs = 100;
 
 }  // namespace config

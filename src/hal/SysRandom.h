@@ -1,5 +1,5 @@
 #pragma once
 #include <stdint.h>
 
-// 32 bits du générateur aléatoire matériel de la plateforme.
+// 32 bits from the platform hardware random number generator.
 uint32_t sysRandom32();

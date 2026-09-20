@@ -1,14 +1,15 @@
 #ifdef BOARD_HELTEC_T096
 // =====================================================================
-// Heltec T096 — nRF52840 + SX1262, TFT couleur ST7735 0,96" (160x80),
-// un seul bouton utilisateur, et le même FEM KCT8103L que les V4
-// (LNA débrayable en réception, ~13 dB de gain PA en émission d'après
-// MeshCore : 9 dBm demandés au SX1262 pour ~22 dBm à l'antenne).
+// Heltec T096 - nRF52840 + SX1262, 0.96" ST7735 color TFT (160x80), a
+// single user button, and the same KCT8103L FEM as the V4 boards
+// (bypassable LNA on receive, ~13 dB of PA gain on transmit according
+// to MeshCore: 9 dBm requested from the SX1262 for ~22 dBm at the
+// antenna).
 //
-// Brochage repris du firmware MeshCore (variants/heltec_t096) : la
-// variante Arduino (variants/Heltec_T096_Board) fournit les macros
-// LORA_*/SX126X_*/PIN_TFT_*/PIN_USER_BTN, et le bus SPI par défaut est
-// celui de la radio. Le TFT est sur SPI1.
+// Pinout taken from the MeshCore firmware (variants/heltec_t096): the
+// Arduino variant (variants/Heltec_T096_Board) provides the
+// LORA_*/SX126X_*/PIN_TFT_*/PIN_USER_BTN macros, and the default SPI
+// bus is the radio's. The TFT is on SPI1.
 // =====================================================================
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
@@ -18,35 +19,35 @@
 
 namespace {
 
-// FEM KCT8103L : LDO d'alimentation, CSD (enable) et CTX (aiguillage :
-// HIGH = PA en émission / LNA contourné en réception, LOW = LNA actif).
+// FEM KCT8103L: supply LDO, CSD (enable) and CTX (routing:
+// HIGH = PA on transmit / LNA bypassed on receive, LOW = LNA active).
 constexpr uint8_t kPinFemLdo = 30;
 constexpr uint8_t kPinFemCsd = 12;
 constexpr uint8_t kPinFemCtx = 41;
 constexpr int8_t kFemTxGainDb = 13;
 
-constexpr uint8_t kPinVext = 26;   // VDD du TFT et du GPS, actif à l'état HAUT
-constexpr uint8_t kPin3V3En = 38;  // rail 3,3 V des périphériques
+constexpr uint8_t kPinVext = 26;   // TFT and GPS VDD, active HIGH
+constexpr uint8_t kPin3V3En = 38;  // 3.3 V peripheral rail
 
 const ButtonSpec kButtons[] = {
-    // pull-up externe sur la carte
+    // external pull-up on the board
     {Key::Ok, PIN_USER_BTN, /*activeLow=*/true, /*internalPullup=*/false},
 };
 
-// Adaptateur Display -> ST7735 : trame composée dans un framebuffer
-// 16 bits (25,6 Ko de RAM), zone logique 128x64 centrée dans le panneau
-// 160x80, polices U8g2 rendues par U8g2_for_Adafruit_GFX. Init "mini
-// 160x80" sans inversion de couleurs, comme le pilote MeshCore du T096.
+// Display -> ST7735 adapter: frame composed in a 16-bit framebuffer
+// (25.6 KB of RAM), logical 128x64 area centered in the 160x80 panel,
+// U8g2 fonts rendered by U8g2_for_Adafruit_GFX. "mini 160x80" init
+// without color inversion, like the MeshCore T096 driver.
 class T096Display : public Display {
 public:
   void begin() override {
-    // Rétroéclairage coupé pendant l'init (actif à l'état bas)
+    // Backlight switched off during init (active low)
     pinMode(PIN_TFT_LEDA_CTL, OUTPUT);
     digitalWrite(PIN_TFT_LEDA_CTL, !PIN_TFT_LEDA_CTL_ACTIVE);
     _tft.initR(INITR_MINI160x80);
-    _tft.setRotation(1);  // paysage 160x80
+    _tft.setRotation(1);  // landscape 160x80
     _fonts.begin(_canvas);
-    _fonts.setFontMode(1);  // fond transparent
+    _fonts.setFontMode(1);  // transparent background
     _fonts.setForegroundColor(kWhite);
     clear();
     send();
@@ -82,9 +83,9 @@ public:
 
   void setInkInverted(bool inverted) override {
     _ink = inverted ? kBlack : kWhite;
-    // Texte inversé rendu en mode "plein" : la lib peint elle-même le
-    // fond blanc du glyphe puis ses pixels noirs, au lieu du mode
-    // transparent par-dessus la boîte déjà remplie.
+    // Inverted text rendered in "solid" mode: the library paints the
+    // white glyph background itself then its black pixels, instead of
+    // the transparent mode on top of the already filled box.
     _fonts.setFontMode(inverted ? 0 : 1);
     _fonts.setForegroundColor(_ink);
     _fonts.setBackgroundColor(inverted ? kWhite : kBlack);
@@ -118,22 +119,22 @@ public:
     pinMode(kPin3V3En, OUTPUT);
     digitalWrite(kPin3V3En, HIGH);
     pinMode(kPinVext, OUTPUT);
-    digitalWrite(kPinVext, HIGH);  // allume le VDD du TFT
+    digitalWrite(kPinVext, HIGH);  // turn on the TFT VDD
 
-    // Alimente puis configure le FEM. CSD haut = actif ; CTX haut au
-    // départ = PA dans le chemin d'émission, LNA contourné en réception.
-    // L'aiguillage RX est ensuite géré par radioRxMode() selon setFemLna().
-    // Attention si le LNA est activé : son gain s'ajoute au RSSI mesuré
-    // par le SX1262, précisément la donnée que cet appareil affiche.
+    // Power then configure the FEM. CSD high = enabled; CTX high
+    // initially = PA in the transmit path, LNA bypassed on receive. RX
+    // routing is then handled by radioRxMode() according to setFemLna().
+    // Careful when the LNA is enabled: its gain adds to the RSSI measured
+    // by the SX1262, precisely the figure this device displays.
     pinMode(kPinFemLdo, OUTPUT);
     digitalWrite(kPinFemLdo, HIGH);
-    delay(1);  // temps de démarrage du FEM
+    delay(1);  // FEM start-up time
     pinMode(kPinFemCsd, OUTPUT);
     digitalWrite(kPinFemCsd, HIGH);
     pinMode(kPinFemCtx, OUTPUT);
     digitalWrite(kPinFemCtx, HIGH);
 
-    delay(50);  // stabilisation des rails avant l'init du TFT
+    delay(50);  // let the rails settle before initializing the TFT
   }
 
   void radioTxMode() override { digitalWrite(kPinFemCtx, HIGH); }
@@ -154,7 +155,7 @@ public:
     t.pins.dio1 = SX126X_DIO1;
     t.pins.reset = SX126X_RESET;
     t.pins.busy = SX126X_BUSY;
-    // sck/miso/mosi à -1 : bus SPI par défaut de la variante
+    // sck/miso/mosi left at -1: default SPI bus of the variant
     t.dio2AsRfSwitch = true;
     t.tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
     t.currentLimitmA = 140;

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# Convertit un firmware Intel HEX en UF2, à glisser-déposer sur le disque
-# exposé par le bootloader UF2 (double appui sur RESET sur le Wio Tracker).
-# Format UF2 : https://github.com/microsoft/uf2 — blocs de 512 octets dont
-# 256 de charge utile, famille passée en argument (nRF52840 : 0xADA52840).
+# Converts an Intel HEX firmware to UF2, to be dropped onto the drive
+# exposed by the UF2 bootloader (double-press RESET on the Wio Tracker).
+# UF2 format: https://github.com/microsoft/uf2 - 512-byte blocks with a
+# 256-byte payload, family passed as an argument (nRF52840: 0xADA52840).
 #
-# Usage : hex2uf2.py <entrée.hex> <sortie.uf2> <famille>
+# Usage: hex2uf2.py <input.hex> <output.uf2> <family>
 import struct
 import sys
 
@@ -16,7 +16,7 @@ PAYLOAD_SIZE = 256
 
 
 def parse_hex(path):
-    """Renvoie la liste triée des (adresse, octet) du fichier Intel HEX."""
+    """Return the sorted list of (address, byte) from the Intel HEX file."""
     memory = {}
     base = 0
     with open(path) as f:
@@ -28,22 +28,22 @@ def parse_hex(path):
             count, addr, rectype = raw[0], (raw[1] << 8) | raw[2], raw[3]
             data = raw[4 : 4 + count]
             if sum(raw) & 0xFF != 0:
-                raise ValueError("somme de contrôle HEX invalide : " + line)
-            if rectype == 0x00:  # données
+                raise ValueError("invalid HEX checksum: " + line)
+            if rectype == 0x00:  # data
                 for i, byte in enumerate(data):
                     memory[base + addr + i] = byte
-            elif rectype == 0x01:  # fin de fichier
+            elif rectype == 0x01:  # end of file
                 break
-            elif rectype == 0x02:  # adresse de segment étendue
+            elif rectype == 0x02:  # extended segment address
                 base = ((data[0] << 8) | data[1]) << 4
-            elif rectype == 0x04:  # adresse linéaire étendue
+            elif rectype == 0x04:  # extended linear address
                 base = ((data[0] << 8) | data[1]) << 16
-            # 0x03/0x05 (adresses de démarrage) : sans objet pour un UF2
+            # 0x03/0x05 (start addresses): irrelevant for a UF2
     return sorted(memory.items())
 
 
 def to_blocks(memory):
-    """Regroupe les octets en blocs de PAYLOAD_SIZE alignés."""
+    """Group the bytes into aligned PAYLOAD_SIZE blocks."""
     blocks = {}
     for addr, byte in memory:
         block_addr = addr - (addr % PAYLOAD_SIZE)
@@ -54,7 +54,7 @@ def to_blocks(memory):
 
 def main():
     if len(sys.argv) != 4:
-        sys.exit("usage : hex2uf2.py <entrée.hex> <sortie.uf2> <famille>")
+        sys.exit("usage: hex2uf2.py <input.hex> <output.uf2> <family>")
     src, dst, family = sys.argv[1], sys.argv[2], int(sys.argv[3], 0)
 
     blocks = to_blocks(parse_hex(src))
@@ -69,7 +69,7 @@ def main():
                       struct.pack("<I", UF2_MAGIC_END))
     first = blocks[0][0]
     last = blocks[-1][0] + PAYLOAD_SIZE
-    print("%s : %d blocs, 0x%05X-0x%05X" % (dst, len(blocks), first, last))
+    print("%s: %d blocks, 0x%05X-0x%05X" % (dst, len(blocks), first, last))
 
 
 if __name__ == "__main__":

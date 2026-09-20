@@ -3,15 +3,15 @@
 
 #include "Display.h"
 
-// Adaptateur Display -> U8g2, pour les OLED monochromes 128x64
-// (SH1106, SSD1306) des cartes actuelles.
+// Display -> U8g2 adapter, for the 128x64 monochrome OLEDs (SH1106,
+// SSD1306) of the current boards.
 class U8g2Display : public Display {
 public:
   explicit U8g2Display(U8G2 &u8g2) : _d(u8g2) {}
 
   void begin() override {
-    // I2C à 400 kHz : une trame complète passe en ~25 ms, nécessaire aux
-    // animations de l'écran principal.
+    // I2C at 400 kHz: a full frame goes through in ~25 ms, required by
+    // the main screen animations.
     _d.setBusClock(400000);
     _d.begin();
   }

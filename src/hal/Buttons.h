@@ -5,17 +5,17 @@
 
 struct ButtonEvent {
   Key key;
-  bool longPress;  // appui maintenu kLongPressMs (émis sans attendre le relâcher)
+  bool longPress;  // held for kLongPressMs (emitted without waiting for release)
 };
 
-// Lecture débouncée des boutons déclarés par la carte, convertis en
-// événements de touches logiques. Un clic court est émis au relâcher,
-// un appui long dès que le seuil est atteint (jamais les deux).
+// Debounced reading of the buttons declared by the board, turned into
+// logical key events. A short click is emitted on release, a long press
+// as soon as the threshold is reached (never both).
 class Buttons {
 public:
   void begin(const ButtonSpec *specs, size_t count);
 
-  // true si un événement est disponible ; à appeler à chaque loop()
+  // true when an event is available; call on every loop()
   bool poll(ButtonEvent &event);
 
 private:
@@ -25,9 +25,9 @@ private:
 
   struct State {
     ButtonSpec spec;
-    bool raw;        // dernière lecture brute
-    bool stable;     // état débouncé (true = pressé)
-    bool longFired;  // l'appui long de la pression en cours a été émis
+    bool raw;        // last raw reading
+    bool stable;     // debounced state (true = pressed)
+    bool longFired;  // long press of the current hold has been emitted
     uint32_t lastEdgeMs;
     uint32_t pressedAtMs;
   };

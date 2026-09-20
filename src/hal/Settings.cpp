@@ -6,9 +6,9 @@ namespace {
 
 constexpr uint16_t kSettingsVersion = 2;
 
-// Représentation stockée, versionnée : toute évolution du format passe
-// par une incrémentation de version (les anciennes données sont alors
-// ignorées et les défauts d'usine réappliqués).
+// Versioned stored representation: any change to the format goes
+// through a version bump (old data is then ignored and the factory
+// defaults are reapplied).
 struct StoredSettings {
   uint16_t version;
   uint8_t targetPrefix[2];
@@ -55,7 +55,7 @@ constexpr char kNvsKey[] = "cfg";
 
 bool settingsLoad(AppSettings &out) {
   Preferences prefs;
-  // begin() en lecture seule échoue si le namespace n'existe pas encore
+  // a read-only begin() fails when the namespace does not exist yet
   if (!prefs.begin(kNvsNamespace, true)) {
     return false;
   }
@@ -112,8 +112,8 @@ void settingsSave(const AppSettings &s) {
   }
   StoredSettings stored;
   pack(s, stored);
-  // FILE_O_WRITE écrit en fin de fichier existant : on repart d'un
-  // fichier neuf à chaque sauvegarde.
+  // FILE_O_WRITE appends to an existing file: start from a fresh file
+  // on every save.
   InternalFS.remove(kSettingsPath);
   File file(InternalFS);
   if (!file.open(kSettingsPath, FILE_O_WRITE)) {
@@ -124,5 +124,5 @@ void settingsSave(const AppSettings &s) {
 }
 
 #else
-#error "Settings : plateforme non gérée"
+#error "Settings: unsupported platform"
 #endif

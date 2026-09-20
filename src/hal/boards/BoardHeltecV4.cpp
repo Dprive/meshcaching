@@ -1,21 +1,20 @@
 #if defined(BOARD_HELTEC_V4_3) || defined(BOARD_HELTEC_V4_R8)
 // =====================================================================
-// Heltec WiFi LoRa 32 V4 — deux déclinaisons partagent cette carte :
-//  - BOARD_HELTEC_V4_3 : révision 4.3 (ESP32-S3R2, 2 Mo PSRAM) ;
-//  - BOARD_HELTEC_V4_R8 : série "R8" (ESP32-S3R8, 8 Mo PSRAM), vendue
-//    ensuite, qui ne diffère ici que par la broche de son rail Vext
-//    (GPIO40 au lieu de GPIO36).
+// Heltec WiFi LoRa 32 V4 - two variants share this board file:
+//  - BOARD_HELTEC_V4_3: revision 4.3 (ESP32-S3R2, 2 MB PSRAM);
+//  - BOARD_HELTEC_V4_R8: "R8" series (ESP32-S3R8, 8 MB PSRAM), sold
+//    later, which differs here only by the pin of its Vext rail
+//    (GPIO40 instead of GPIO36).
 //
-// Commun aux deux : SX1262 (brochage LoRa et OLED identique au V3),
-// OLED 128x64 piloté en SSD1306, un seul bouton utilisateur (PRG), et
-// un FEM (front-end module) KCT8103L entre le SX1262 et l'antenne, qui
-// ajoute ~12 dB en émission et offre un LNA débrayable en réception.
-// Valeurs reprises du firmware MeshCore (variants/heltec_v4{,_r8}).
+// Common to both: SX1262 (LoRa and OLED pinout identical to the V3),
+// 128x64 OLED driven as SSD1306, a single user button (PRG), and a FEM
+// (front-end module) KCT8103L between the SX1262 and the antenna, which
+// adds ~12 dB on transmit and offers a bypassable LNA on receive.
+// Values taken from the MeshCore firmware (variants/heltec_v4{,_r8}).
 //
-// Note : les V4 antérieurs au 4.3 embarquent un autre FEM (GC1109,
-// pilotage différent) et ne sont pas gérés : initPower() le détecte et
-// bloque le démarrage. Les déclinaisons TFT et e-ink ne sont pas gérées
-// non plus.
+// Note: V4 boards older than 4.3 carry a different FEM (GC1109, driven
+// differently) and are not supported: initPower() detects it and blocks
+// startup. The TFT and e-ink variants are not supported either.
 // =====================================================================
 #include <U8g2lib.h>
 
@@ -32,26 +31,26 @@ constexpr uint8_t kPinLoraReset = 12;
 constexpr uint8_t kPinLoraBusy = 13;
 constexpr uint8_t kPinLoraDio1 = 14;
 
-// FEM KCT8103L : LDO d'alimentation, CSD (enable) et CTX (aiguillage :
-// HIGH = PA en émission / LNA contourné en réception, LOW = LNA actif).
+// FEM KCT8103L: supply LDO, CSD (enable) and CTX (routing:
+// HIGH = PA on transmit / LNA bypassed on receive, LOW = LNA active).
 constexpr uint8_t kPinFemLdo = 7;
 constexpr uint8_t kPinFemCsd = 2;
 constexpr uint8_t kPinFemCtx = 5;
-// Gain du PA en émission : MeshCore documente 10 dBm demandés au SX1262
-// pour 22 dBm mesurés à l'antenne.
+// PA gain on transmit: MeshCore documents 10 dBm requested from the
+// SX1262 for 22 dBm measured at the antenna.
 constexpr int8_t kFemTxGainDb = 12;
 
 constexpr uint8_t kPinOledSda = 17;
 constexpr uint8_t kPinOledScl = 18;
 constexpr uint8_t kPinOledReset = 21;
-constexpr uint8_t kPinButtonPrg = 0;  // relié à la masse quand pressé
+constexpr uint8_t kPinButtonPrg = 0;  // tied to ground when pressed
 
-// Vext (alim de l'OLED) : actif à l'état BAS sur toute la série — le
-// rail est commuté par un MOSFET canal P (schéma officiel HTIT-WB32LAF
-// V4.3, transistor Q2 AO3401A), comme sur le V3. Ne pas se fier au
-// PIN_VEXT_EN_ACTIVE=HIGH de la variante heltec_v4 de MeshCore : leur
-// écran est construit sans référence au rail, ce niveau n'est jamais
-// appliqué (et leur variante R8, plus récente, dit bien LOW).
+// Vext (OLED supply): active LOW across the whole series - the rail is
+// switched by a P-channel MOSFET (official HTIT-WB32LAF V4.3 schematic,
+// transistor Q2 AO3401A), as on the V3. Do not trust the
+// PIN_VEXT_EN_ACTIVE=HIGH of MeshCore's heltec_v4 variant: their display
+// is built without any reference to the rail, so that level is never
+// applied (and their newer R8 variant does say LOW).
 #ifdef BOARD_HELTEC_V4_R8
 constexpr char kBoardName[] = "Heltec WiFi LoRa 32 V4 R8";
 constexpr uint8_t kPinVext = 40;
@@ -71,35 +70,35 @@ public:
 
   void initPower() override {
     pinMode(kPinVext, OUTPUT);
-    digitalWrite(kPinVext, kVextOnLevel);  // allume le rail Vext (OLED)
+    digitalWrite(kPinVext, kVextOnLevel);  // turn on the Vext rail (OLED)
 
-    // Alimente le FEM puis identifie sa référence par le niveau de repos
-    // de CSD (astuce reprise de MeshCore) : pull-up interne sur le
-    // KCT8103L (V4.3 et R8) -> HIGH, pull-down sur le GC1109 (V4 <= 4.2)
-    // -> LOW. Un GC1109 se pilote différemment : plutôt que d'émettre à
-    // travers un FEM mal configuré, on coupe son alimentation et on
-    // laisse l'application s'arrêter sur selfCheckError().
+    // Power the FEM, then identify its part number from the idle level
+    // of CSD (trick taken from MeshCore): internal pull-up on the
+    // KCT8103L (V4.3 and R8) -> HIGH, pull-down on the GC1109 (V4 <= 4.2)
+    // -> LOW. A GC1109 is driven differently: rather than transmitting
+    // through a misconfigured FEM, we cut its supply and let the
+    // application stop on selfCheckError().
     pinMode(kPinFemLdo, OUTPUT);
     digitalWrite(kPinFemLdo, HIGH);
-    delay(1);  // temps de démarrage du FEM
+    delay(1);  // FEM start-up time
     pinMode(kPinFemCsd, INPUT);
     delay(1);
     if (digitalRead(kPinFemCsd) == LOW) {
       digitalWrite(kPinFemLdo, LOW);
       _selfCheckError = "FEM GC1109 (V4<=4.2)";
     } else {
-      // Configure le FEM. CSD haut = actif ; CTX haut au départ = PA dans
-      // le chemin d'émission, LNA contourné en réception. L'aiguillage RX
-      // est ensuite géré par radioRxMode() selon setFemLna(). Attention si
-      // le LNA est activé : son gain s'ajoute au RSSI mesuré par le
-      // SX1262, précisément la donnée que cet appareil affiche.
+      // Configure the FEM. CSD high = enabled; CTX high initially = PA
+      // in the transmit path, LNA bypassed on receive. RX routing is then
+      // handled by radioRxMode() according to setFemLna(). Careful when
+      // the LNA is enabled: its gain adds to the RSSI measured by the
+      // SX1262, precisely the figure this device displays.
       pinMode(kPinFemCsd, OUTPUT);
       digitalWrite(kPinFemCsd, HIGH);
       pinMode(kPinFemCtx, OUTPUT);
       digitalWrite(kPinFemCtx, HIGH);
     }
 
-    delay(150);  // stabilisation du Vext avant l'init de l'OLED
+    delay(150);  // let Vext settle before initializing the OLED
   }
 
   const char *selfCheckError() const override { return _selfCheckError; }
@@ -138,8 +137,8 @@ public:
     return t;
   }
 
-  // Même FEM et même chaîne RF que la 4.3 : même plafond de 20 dBm à
-  // l'antenne pour la série R8 (à ajuster si son PA est qualifié plus haut).
+  // Same FEM and same RF chain as the 4.3: same 20 dBm ceiling at the
+  // antenna for the R8 series (to adjust if its PA is qualified higher).
   int8_t txPowerMaxDbm() const override { return 20; }
 
   const ButtonSpec *buttons(size_t &count) const override {

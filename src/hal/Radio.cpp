@@ -22,7 +22,7 @@ Radio::Radio(Board &board)
 
 int8_t Radio::chipPowerDbm(int8_t antennaDbm) const {
   int chip = antennaDbm - _traits.femTxGainDb;
-  return (int8_t)constrain(chip, kTxPowerMinDbm, 22);  // plage du SX1262
+  return (int8_t)constrain(chip, kTxPowerMinDbm, 22);  // SX1262 range
 }
 
 void Radio::setTxPowerDbm(int8_t antennaDbm) {
@@ -37,7 +37,7 @@ void Radio::setRxGainMode(RxGainMode mode) {
   }
   _board.setFemLna(mode == RxGainMode::kFemLna);
   _lora.setRxBoostedGainMode(mode == RxGainMode::kSxBoost);
-  startReceive();  // réapplique l'aiguillage RX du FEM
+  startReceive();  // re-applies the FEM RX routing
 }
 
 int16_t Radio::begin(float freqMhz, float bwKhz, uint8_t sf, uint8_t cr,
@@ -50,7 +50,7 @@ int16_t Radio::begin(float freqMhz, float bwKhz, uint8_t sf, uint8_t cr,
     SPI.begin();
   }
 #else
-  SPI.begin();  // broches fixées par la variante
+  SPI.begin();  // pins fixed by the variant
 #endif
 
   _antennaDbm = (int8_t)constrain(txPowerDbm, _board.txPowerMinDbm(),
@@ -70,14 +70,14 @@ int16_t Radio::begin(float freqMhz, float bwKhz, uint8_t sf, uint8_t cr,
     _lora.setRfSwitchPins(_traits.pins.rxEn, _traits.pins.txEn);
   }
   _lora.setCurrentLimit(_traits.currentLimitmA);
-  // La chaîne de gain RX (boost SX126x / LNA FEM) est appliquée ensuite
-  // par l'application via setRxGainMode(), selon la config persistée.
+  // The RX gain chain (SX126x boost / FEM LNA) is applied afterwards by
+  // the application through setRxGainMode(), per the persisted config.
 
   if (_traits.femRxPatch) {
-    // Registre 0x8B5 non documenté : "improved RX" pour les Heltec V4 à
-    // FEM, en parité avec le firmware MeshCore (recette Heltec). Sans
-    // lecture valide, on n'écrit pas : écrire 0x01 seul écraserait les
-    // autres bits du registre.
+    // Undocumented register 0x8B5: "improved RX" for the Heltec V4
+    // boards with a FEM, on par with the MeshCore firmware (Heltec
+    // recipe). Without a valid read we do not write: writing 0x01 alone
+    // would clobber the other bits of the register.
     uint8_t value = 0;
     if (_lora.readRegister(0x8B5, &value, 1) == RADIOLIB_ERR_NONE) {
       value |= 0x01;
@@ -92,12 +92,12 @@ int16_t Radio::begin(float freqMhz, float bwKhz, uint8_t sf, uint8_t cr,
 }
 
 bool Radio::channelClear() {
-  // Une erreur de scan est traitée comme un canal occupé.
+  // A scan error is treated as a busy channel.
   int16_t state = _lora.scanChannel();
-  // Le CAD-done vient de lever DIO1 : l'effacer maintenant, puis
-  // repasser en écoute. Un RX-done ultérieur (paquet reçu pendant que
-  // l'appelant patiente) relèvera le drapeau et sera vu par
-  // packetAvailable() avant le cycle de CAD suivant.
+  // The CAD-done has just raised DIO1: clear it now, then go back to
+  // listening. A later RX-done (packet received while the caller waits)
+  // will raise the flag again and be seen by packetAvailable() before
+  // the next CAD cycle.
   s_packetFlag = false;
   startReceive();
   return state == RADIOLIB_CHANNEL_FREE;
@@ -106,9 +106,9 @@ bool Radio::channelClear() {
 int16_t Radio::transmit(const uint8_t *data, size_t len) {
   _board.radioTxMode();
   int16_t state = _lora.transmit(data, len);
-  // transmit() déclenche aussi une interruption DIO1 de "fin d'émission",
-  // qui peut avoir armé le drapeau à tort : on l'efface avant de repasser
-  // en écoute, pour ne pas traiter du vide comme un paquet reçu.
+  // transmit() also raises a "transmission done" DIO1 interrupt, which
+  // may have armed the flag by mistake: clear it before going back to
+  // listening, so that nothing is handled as a received packet.
   s_packetFlag = false;
   startReceive();
   return state;
@@ -131,10 +131,10 @@ int16_t Radio::readPacket(uint8_t *buf, size_t maxLen, size_t &len,
     return RADIOLIB_ERR_NONE;
   }
   int16_t state = _lora.readData(buf, len);
-  // GetPacketStatus (LoRa) renvoie [RssiPkt, SnrPkt, SignalRssiPkt],
-  // rangés ici de l'octet haut vers l'octet bas. Attention : le
-  // getRSSI(paquet) de RadioLib lit l'octet bas, donc SignalRssiPkt —
-  // on décode les trois octets explicitement pour ne pas les confondre.
+  // GetPacketStatus (LoRa) returns [RssiPkt, SnrPkt, SignalRssiPkt],
+  // ordered here from the high byte down to the low byte. Careful:
+  // RadioLib's getRSSI(packet) reads the low byte, hence SignalRssiPkt -
+  // the three bytes are decoded explicitly so they are not confused.
   uint32_t status = _lora.getPacketStatus();
   rssi = -0.5f * (float)((status >> 16) & 0xFF);
   despreadRssi = -0.5f * (float)(status & 0xFF);

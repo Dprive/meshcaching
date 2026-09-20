@@ -1,6 +1,6 @@
-# Injecte la version du firmware (-D MESHCACHING_VERSION) au moment du
-# build : celle du tag git sur une release, "v1.2.3-4-gabc123-dirty" sur
-# un build intermédiaire, "dev" hors dépôt git.
+# Injects the firmware version (-D MESHCACHING_VERSION) at build time:
+# the git tag on a release, "v1.2.3-4-gabc123-dirty" on an intermediate
+# build, "dev" outside a git repository.
 import subprocess
 
 Import("env")
@@ -17,5 +17,5 @@ def git_version():
 
 
 version = git_version()
-print("Version du firmware : %s" % version)
+print("Firmware version: %s" % version)
 env.Append(CPPDEFINES=[("MESHCACHING_VERSION", env.StringifyMacro(version))])

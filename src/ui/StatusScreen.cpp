@@ -27,10 +27,10 @@ void StatusScreen::showSplash(const char *version) {
 }
 
 void StatusScreen::drawSleepLogo() {
-  // "zZZ" façon émoji sommeil : trois Z croissants en diagonale montante,
-  // serrés à un pixel d'écart. L'animation part du vide et les révèle
-  // un à un au rythme d'une respiration.
-  uint8_t phase = (millis() / 600) % 4;  // 0 = rien d'affiché
+  // "zZZ" like a sleep emoji: three growing Z's on a rising diagonal,
+  // packed one pixel apart. The animation starts from nothing and
+  // reveals them one by one at a breathing pace.
+  uint8_t phase = (millis() / 600) % 4;  // 0 = nothing shown
   if (phase == 0) {
     return;
   }
@@ -58,7 +58,7 @@ void StatusScreen::drawMain(const MainView &v) {
   _d.clear();
   char buf[24];
 
-  // --- Bandeau : répéteur surveillé, bruit de fond, témoin d'émission ---
+  // --- Header: monitored repeater, noise floor, transmit indicator ---
   _d.setFont(Font::kSmall);
   snprintf(buf, sizeof(buf), "RPT %02X%02X", v.pubkeyPrefix[0],
            v.prefixLen >= 2 ? v.pubkeyPrefix[1] : 0);
@@ -68,8 +68,8 @@ void StatusScreen::drawMain(const MainView &v) {
     _d.drawText(56, 10, buf);
   }
   if (v.txBadge != nullptr) {
-    // Taille fixe (calée sur "LBT") pour que LBT -> TX ne fasse pas
-    // bouger le bandeau, texte centré ; "OCCUPÉ" s'élargit juste assez.
+    // Fixed size (based on "LBT") so that LBT -> TX does not shift the
+    // header, with centered text; "OCCUPÉ" widens just enough.
     uint16_t textWidth = _d.textWidth(v.txBadge);
     uint16_t badgeWidth = _d.textWidth("LBT") + 6;
     if (textWidth + 6 > badgeWidth) {
@@ -84,8 +84,8 @@ void StatusScreen::drawMain(const MainView &v) {
   _d.drawHLine(0, 13, _d.width());
 
   if (v.rssiValid && v.rssiDisplay == RssiDisplayMode::kBoth) {
-    // --- RSSI moyen (gauche) et RSSI après désétalement (droite),
-    // côte à côte, chacun centré dans sa moitié d'écran ---
+    // --- Average RSSI (left) and despread RSSI (right), side by side,
+    // each centered in its own half of the screen ---
     const int16_t half = _d.width() / 2;
     _d.setFont(Font::kSmall);
     _d.drawText((half - _d.textWidth("RSSI")) / 2, 25, "RSSI");
@@ -95,9 +95,9 @@ void StatusScreen::drawMain(const MainView &v) {
     _d.drawText((half - _d.textWidth(buf)) / 2, 45, buf);
     snprintf(buf, sizeof(buf), "%d", (int)lroundf(v.despreadRssi));
     _d.drawText(half + (half - _d.textWidth(buf)) / 2, 45, buf);
-    _d.drawBox(half - 1, 17, 1, 30);  // séparateur des deux colonnes
+    _d.drawBox(half - 1, 17, 1, 30);  // separator between the columns
   } else if (v.rssiValid) {
-    // --- Une seule valeur, en grand et sans titre : focus sur elle ---
+    // --- A single value, large and untitled: all the focus on it ---
     float value = v.rssiDisplay == RssiDisplayMode::kDespreadOnly
                       ? v.despreadRssi
                       : v.rssi;
@@ -112,7 +112,7 @@ void StatusScreen::drawMain(const MainView &v) {
     drawSleepLogo();
   }
 
-  // --- SNR du dernier paquet, centré sous le RSSI ---
+  // --- SNR of the last packet, centered under the RSSI ---
   if (v.rssiValid) {
     _d.setFont(Font::kSmall);
     int snr10 = (int)lroundf(v.snr * 10.0f);
@@ -121,14 +121,14 @@ void StatusScreen::drawMain(const MainView &v) {
     _d.drawText((_d.width() - _d.textWidth(buf)) / 2, 58, buf);
   }
 
-  // --- Barre décroissante : temps avant la prochaine émission possible ---
+  // --- Shrinking bar: time until the next transmission is allowed ---
   if (v.cooldownRemainingMs > 0 && v.cooldownTotalMs > 0) {
     uint16_t barWidth = (uint16_t)((uint32_t)_d.width() *
                                    v.cooldownRemainingMs / v.cooldownTotalMs);
     _d.drawBox(0, 61, barWidth, 3);
   }
 
-  // --- Réponse valide reçue : clignotement par inversion de la trame ---
+  // --- Valid reply received: blink by inverting the frame ---
   if (v.invert) {
     _d.invertFrame();
   }

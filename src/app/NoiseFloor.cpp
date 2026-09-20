@@ -11,5 +11,5 @@ void NoiseFloor::addSample(float rssiDbm) {
   _medianDbm = (_samples[kSamplesPerCycle / 2 - 1] +
                 _samples[kSamplesPerCycle / 2]) / 2.0f;
   _hasValue = true;
-  _count = 0;  // cycle suivant, sans pause
+  _count = 0;  // next cycle, no pause
 }

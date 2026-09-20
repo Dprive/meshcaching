@@ -1,11 +1,11 @@
 #ifdef BOARD_WIO_TRACKER_L1
 // =====================================================================
-// Seeed Wio Tracker L1 Pro — nRF52840 + SX1262, OLED SH1106 128x64 (I2C),
-// croix directionnelle + bouton menu.
+// Seeed Wio Tracker L1 Pro - nRF52840 + SX1262, SH1106 128x64 OLED (I2C),
+// directional pad + menu button.
 //
-// Les broches (P_LORA_*, SX126X_*, PIN_BUTTON*, JOYSTICK_*) viennent de
-// variants/Seeed_Wio_Tracker_L1/variant.h, repris du firmware MeshCore.
-// SPI et I2C utilisent les bus par défaut fixes par la variante.
+// The pins (P_LORA_*, SX126X_*, PIN_BUTTON*, JOYSTICK_*) come from
+// variants/Seeed_Wio_Tracker_L1/variant.h, taken from the MeshCore
+// firmware. SPI and I2C use the default buses set by the variant.
 // =====================================================================
 #include <U8g2lib.h>
 #include <Wire.h>
@@ -16,8 +16,8 @@
 namespace {
 
 const ButtonSpec kButtons[] = {
-    // Le joystick et ses directions ont des résistances de tirage sur la
-    // carte ; seul le bouton menu utilise le pull-up interne.
+    // The joystick and its directions have pull-up resistors on the
+    // board; only the menu button uses the internal pull-up.
     {Key::Ok, JOYSTICK_PRESS, /*activeLow=*/true, /*internalPullup=*/false},
     {Key::Back, PIN_BUTTON1, /*activeLow=*/true, /*internalPullup=*/true},
     {Key::Up, JOYSTICK_UP, /*activeLow=*/true, /*internalPullup=*/false},
@@ -30,21 +30,21 @@ class WioTrackerL1Board : public Board {
 public:
   const char *name() const override { return "Seeed Wio Tracker L1 Pro"; }
 
-  // Pas de rail Vext ni de reset dédié : l'écran est alimenté en
-  // permanence, initPower() par défaut (vide) suffit.
+  // No Vext rail and no dedicated reset: the display is powered
+  // permanently, so the default (empty) initPower() is enough.
 
   Display &display() override { return _display; }
 
   void beginDisplay() override {
-    // Adresse nominale 0x3D (cf. variant.h) ; certains modules SH1106
-    // répondent en 0x3C, on sonde avant d'initialiser.
+    // Nominal address 0x3D (see variant.h); some SH1106 modules answer
+    // at 0x3C, so probe the bus before initializing.
     Wire.begin();
     uint8_t addr = DISPLAY_ADDRESS;
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() != 0) {
       addr = 0x3C;
     }
-    _u8g2.setI2CAddress(addr << 1);  // U8g2 attend l'adresse 8 bits
+    _u8g2.setI2CAddress(addr << 1);  // U8g2 expects the 8-bit address
     _display.begin();
   }
 
@@ -54,12 +54,12 @@ public:
     t.pins.dio1 = P_LORA_DIO_1;
     t.pins.reset = P_LORA_RESET;
     t.pins.busy = P_LORA_BUSY;
-    // sck/miso/mosi à -1 : bus SPI par défaut de la variante
-    t.pins.rxEn = SX126X_RXEN;  // RadioLib doit piloter RXEN sur cette carte
+    // sck/miso/mosi left at -1: default SPI bus of the variant
+    t.pins.rxEn = SX126X_RXEN;  // RadioLib must drive RXEN on this board
     t.pins.txEn = SX126X_TXEN;
     t.dio2AsRfSwitch = SX126X_DIO2_AS_RF_SWITCH;
-    // Sans la déclaration du TCXO 1.8V sur DIO3, l'init de la radio
-    // échoue (le quartz ne démarre jamais).
+    // Without declaring the 1.8V TCXO on DIO3, radio init fails (the
+    // crystal never starts).
     t.tcxoVoltage = SX126X_DIO3_TCXO_VOLTAGE;
     t.currentLimitmA = 140;
     return t;

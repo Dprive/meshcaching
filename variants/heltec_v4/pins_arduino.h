@@ -1,5 +1,5 @@
-// Variante Arduino du Heltec WiFi LoRa 32 V4, reprise du firmware MeshCore
-// (https://github.com/meshcore-dev/MeshCore, licence MIT).
+// Arduino variant for the Heltec WiFi LoRa 32 V4, taken from the MeshCore
+// firmware (https://github.com/meshcore-dev/MeshCore, MIT license).
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 

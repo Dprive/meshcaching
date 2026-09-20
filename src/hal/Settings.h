@@ -3,28 +3,28 @@
 
 #include "RxGain.h"
 
-// Choix des mesures de signal affichées sur l'écran principal
+// Choice of the signal measurements shown on the main screen
 enum class RssiDisplayMode : uint8_t {
-  kBoth = 0,      // RSSI moyen et despreader côte à côte
-  kRssiOnly = 1,  // RSSI moyen seul, en grand — défaut
-  kDespreadOnly = 2,  // RSSI du despreader seul, en grand
+  kBoth = 0,      // average RSSI and despreader side by side
+  kRssiOnly = 1,  // average RSSI alone, in large type - default
+  kDespreadOnly = 2,  // despreader RSSI alone, in large type
 };
 
 // =====================================================================
-// Configuration persistée de l'application, modifiable via le menu.
-// Stockage : NVS (Preferences) sur ESP32, LittleFS interne sur nRF52.
-// Les défauts d'usine sont composés par l'application (AppConfig + Board).
+// Persisted application configuration, editable from the menu.
+// Storage: NVS (Preferences) on ESP32, internal LittleFS on nRF52.
+// Factory defaults are composed by the application (AppConfig + Board).
 // =====================================================================
 struct AppSettings {
-  uint8_t targetPrefix[2];  // préfixe de clé publique du répéteur cible
-  int8_t txPowerDbm;        // puissance d'émission "à l'antenne"
+  uint8_t targetPrefix[2];  // public key prefix of the target repeater
+  int8_t txPowerDbm;        // transmit power "at the antenna"
   RxGainMode rxGainMode;
   RssiDisplayMode rssiDisplay;
 };
 
 bool settingsEqual(const AppSettings &a, const AppSettings &b);
 
-// false si aucune config valide n'est stockée (premier démarrage,
-// version incompatible) : l'appelant part alors des défauts d'usine.
+// false when no valid config is stored (first boot, incompatible
+// version): the caller then starts from the factory defaults.
 bool settingsLoad(AppSettings &out);
 void settingsSave(const AppSettings &s);

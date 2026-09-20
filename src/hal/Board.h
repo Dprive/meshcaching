@@ -5,24 +5,24 @@
 #include "Display.h"
 
 // =====================================================================
-// Description abstraite d'une carte supportée.
+// Abstract description of a supported board.
 //
-// Chaque cible concrète (src/hal/boards/*.cpp) implémente cette
-// interface et fournit l'unique instance via board(). Le fichier de
-// carte est sélectionné à la compilation par le drapeau -D BOARD_xxx
-// de l'environnement PlatformIO correspondant.
+// Each concrete target (src/hal/boards/*.cpp) implements this interface
+// and provides the single instance through board(). The board file is
+// selected at compile time by the -D BOARD_xxx flag of the matching
+// PlatformIO environment.
 // =====================================================================
 
-// Touches logiques, indépendantes du nombre de boutons physiques.
-// Une carte n'expose que celles qu'elle possède : le Wio Tracker L1 a
-// une croix directionnelle complète, les Heltec un seul bouton (Ok).
+// Logical keys, independent of the number of physical buttons. A board
+// only exposes the ones it has: the Wio Tracker L1 has a full
+// directional pad, the Heltec boards a single button (Ok).
 enum class Key : uint8_t { Ok, Back, Up, Down, Left, Right };
 
 struct ButtonSpec {
   Key key;
   uint8_t pin;
   bool activeLow;
-  bool internalPullup;  // false si la carte a déjà sa résistance de tirage
+  bool internalPullup;  // false if the board already has its pull-up
 };
 
 struct RadioPins {
@@ -30,28 +30,30 @@ struct RadioPins {
   uint32_t dio1 = RADIOLIB_NC;
   uint32_t reset = RADIOLIB_NC;
   uint32_t busy = RADIOLIB_NC;
-  int16_t sck = -1;   // -1 : bus SPI par défaut de la variante
+  int16_t sck = -1;   // -1: default SPI bus of the variant
   int16_t miso = -1;
   int16_t mosi = -1;
-  uint32_t rxEn = RADIOLIB_NC;  // broches du switch d'antenne pilotées par
-  uint32_t txEn = RADIOLIB_NC;  // RadioLib, si la carte en a
+  uint32_t rxEn = RADIOLIB_NC;  // antenna switch pins driven by
+  uint32_t txEn = RADIOLIB_NC;  // RadioLib, if the board has them
 };
 
 struct RadioTraits {
   RadioPins pins;
   bool dio2AsRfSwitch = false;
-  float tcxoVoltage = 0.0f;    // volts ; 0 = quartz simple, pas de TCXO
+  float tcxoVoltage = 0.0f;    // volts; 0 = plain crystal, no TCXO
   uint8_t currentLimitmA = 60;
-  // Gain (dB) d'un ampli FEM externe en émission : la puissance demandée
-  // "à l'antenne" est réduite d'autant avant d'être passée au SX1262.
+  // Gain (dB) of an external FEM amplifier on transmit: the power
+  // requested "at the antenna" is reduced by that much before being
+  // passed to the SX1262.
   int8_t femTxGainDb = 0;
-  // Patch du registre 0x8B5 (non documenté) : recette Heltec reprise du
-  // firmware MeshCore, "improved RX" sur les V4 équipés d'un FEM.
+  // Patch for register 0x8B5 (undocumented): Heltec recipe taken from
+  // the MeshCore firmware, "improved RX" on the V4 boards fitted with a
+  // FEM.
   bool femRxPatch = false;
 };
 
-// Plancher de puissance du SX1262 ; la borne haute est propre à chaque
-// carte (txPowerMaxDbm).
+// SX1262 power floor; the upper bound is specific to each board
+// (txPowerMaxDbm).
 constexpr int8_t kTxPowerMinDbm = -9;
 
 class Board {
@@ -59,44 +61,45 @@ public:
   virtual ~Board() {}
   virtual const char *name() const = 0;
 
-  // Rails d'alimentation des périphériques (Vext, LDO du FEM...).
-  // Appelé avant tout accès I2C/SPI.
+  // Peripheral power rails (Vext, FEM LDO...).
+  // Called before any I2C/SPI access.
   virtual void initPower() {}
 
-  // Écran de la carte (cf. hal/Display.h), construit mais pas initialisé.
+  // Board display (see hal/Display.h), built but not initialized.
   virtual Display &display() = 0;
-  // Démarre l'écran ; à surcharger si l'init sort de l'ordinaire
-  // (sondage d'adresse I2C, réglage de contraste, etc.)
+  // Starts the display; override when the init is out of the ordinary
+  // (I2C address probing, contrast setting, etc.)
   virtual void beginDisplay() { display().begin(); }
 
   virtual RadioTraits radio() const = 0;
 
-  // Puissance TX "à l'antenne", bornes propres à la carte.
+  // TX power "at the antenna", bounds specific to the board.
   virtual int8_t txPowerMaxDbm() const = 0;
   virtual int8_t txPowerDefaultDbm() const { return txPowerMaxDbm(); }
-  // Plancher utile : le plancher du SX1262 remonté du gain TX du FEM —
-  // en dessous, la consigne serait clampée côté puce et la puissance
-  // affichée mentirait sur la puissance réellement émise.
+  // Useful floor: the SX1262 floor raised by the FEM TX gain - below
+  // that, the setpoint would be clamped on the chip side and the
+  // displayed power would lie about the power actually transmitted.
   int8_t txPowerMinDbm() const {
     return (int8_t)(kTxPowerMinDbm + radio().femTxGainDb);
   }
 
-  // Commutation TX/RX d'un FEM externe, si la carte en a un à piloter.
+  // TX/RX switching of an external FEM, if the board has one to drive.
   virtual void radioTxMode() {}
   virtual void radioRxMode() {}
 
-  // LNA externe (FEM) débrayable en réception ? Si oui, setFemLna()
-  // choisit l'aiguillage appliqué au prochain passage en réception.
+  // External LNA (FEM) that can be disengaged on receive? If so,
+  // setFemLna() picks the routing applied at the next switch to receive.
   virtual bool hasFemLna() const { return false; }
   virtual void setFemLna(bool /*enabled*/) {}
 
-  // Auto-test matériel effectué pendant initPower() : message d'erreur
-  // si la carte n'est pas celle attendue (nullptr sinon). L'application
-  // le vérifie après l'init de l'écran et s'arrête là en cas d'échec.
+  // Hardware self-test performed during initPower(): error message if
+  // the board is not the expected one (nullptr otherwise). The
+  // application checks it after the display init and stops there on
+  // failure.
   virtual const char *selfCheckError() const { return nullptr; }
 
   virtual const ButtonSpec *buttons(size_t &count) const = 0;
 };
 
-// Implémentée par l'unique src/hal/boards/*.cpp compilé pour la cible.
+// Implemented by the single src/hal/boards/*.cpp built for the target.
 Board &board();

@@ -12,8 +12,8 @@ uint32_t sysRandom32() {
 
 #elif defined(ARDUINO_ARCH_NRF52) || defined(NRF52_SERIES)
 
-// Lecture directe du périphérique RNG, permise tant que la pile BLE
-// (SoftDevice) n'est pas activée — c'est le cas ici.
+// Direct read of the RNG peripheral, allowed as long as the BLE stack
+// (SoftDevice) is not enabled - which is the case here.
 uint32_t sysRandom32() {
   uint32_t value = 0;
   NRF_RNG->TASKS_START = 1;
@@ -27,5 +27,5 @@ uint32_t sysRandom32() {
 }
 
 #else
-#error "sysRandom32() : plateforme non gérée"
+#error "sysRandom32(): unsupported platform"
 #endif

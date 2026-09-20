@@ -13,7 +13,7 @@ bool parse(const uint8_t *raw, size_t len, PacketView &out) {
   out.payloadType = (header >> 2) & 0x0F;
 
   size_t offset = 1;
-  // Les modes "transport" ajoutent 4 octets de code de transport
+  // The "transport" modes add 4 bytes of transport code
   if (out.routeType == kRouteTransportFlood ||
       out.routeType == kRouteTransportDirect) {
     offset += 4;
@@ -22,7 +22,7 @@ bool parse(const uint8_t *raw, size_t len, PacketView &out) {
     return false;
   }
 
-  // Octet path_length : bits 0-5 = nombre de sauts, bits 6-7 = (taille du hash - 1)
+  // path_length byte: bits 0-5 = hop count, bits 6-7 = (hash size - 1)
   uint8_t pathLengthByte = raw[offset];
   out.hopCount = pathLengthByte & 0x3F;
   out.hashSize = ((pathLengthByte >> 6) & 0x03) + 1;
@@ -31,7 +31,7 @@ bool parse(const uint8_t *raw, size_t len, PacketView &out) {
   out.path = raw + offset;
   offset += (size_t)out.hopCount * out.hashSize;
   if (offset > len) {
-    return false;  // paquet incohérent
+    return false;  // inconsistent packet
   }
 
   out.payload = raw + offset;
@@ -40,28 +40,28 @@ bool parse(const uint8_t *raw, size_t len, PacketView &out) {
 }
 
 bool lastHopId(const PacketView &pkt, const uint8_t *&id, size_t &idLen) {
-  // Un paquet TRACE commence par un tag aléatoire, pas par un hash :
-  // il ne s'identifie que par appariement de tag (cf. traceTag()).
+  // A TRACE packet starts with a random tag, not with a hash: it can
+  // only be identified by tag matching (see traceTag()).
   if (pkt.payloadType == kPayloadTrace) {
     return false;
   }
   if (pkt.hopCount >= 1) {
-    // Cas normal : le dernier hash du chemin est le dernier nœud traversé
+    // Normal case: the last hash of the path is the last node traversed
     id = pkt.path + (size_t)(pkt.hopCount - 1) * pkt.hashSize;
     idLen = pkt.hashSize;
     return true;
   }
   if (pkt.payloadType == kPayloadAdvert && pkt.payloadLen >= kAdvertPubkeyLen) {
-    // Annonce zéro-hop : la clé publique complète de l'émetteur ouvre le payload
+    // Zero-hop advert: the sender's full public key opens the payload
     id = pkt.payload;
     idLen = kAdvertPubkeyLen;
     return true;
   }
-  // Autres paquets zéro-hop : le début du payload n'identifie PAS
-  // l'émetteur (hash du destinataire pour un message direct, hash de
-  // canal pour un message de groupe, CRC pour un ACK...). L'ancienne
-  // heuristique "premier octet = hash source" provoquait de fausses
-  // détections : émetteur indéterminable, donc pas de correspondance.
+  // Other zero-hop packets: the start of the payload does NOT identify
+  // the sender (recipient hash for a direct message, channel hash for a
+  // group message, CRC for an ACK...). The old "first byte = source
+  // hash" heuristic caused false detections: sender undeterminable, so
+  // no match.
   return false;
 }
 
@@ -75,18 +75,18 @@ bool traceTag(const PacketView &pkt, uint32_t &tag) {
 
 size_t buildTracePing(uint8_t *out, uint32_t tag, uint8_t targetHash) {
   size_t offset = 0;
-  // Header : payload TRACE + route DIRECT
+  // Header: TRACE payload + DIRECT route
   out[offset++] = (kPayloadTrace << 2) | kRouteDirect;
-  // path_length (niveau routage) : 0 = zéro-hop, le paquet est émis une
-  // seule fois sans être relayé plus loin (et pas d'octets de chemin)
+  // path_length (routing level): 0 = zero-hop, the packet is sent only
+  // once and is not relayed any further (and no path bytes)
   out[offset++] = 0x00;
   memcpy(out + offset, &tag, sizeof(tag));
   offset += sizeof(tag);
-  uint32_t authCode = 0;  // pas de code d'authentification particulier
+  uint32_t authCode = 0;  // no specific authentication code
   memcpy(out + offset, &authCode, sizeof(authCode));
   offset += sizeof(authCode);
-  out[offset++] = 0x00;  // flags, réservé pour l'instant
-  // Liste des nœuds à tracer : un seul, la cible
+  out[offset++] = 0x00;  // flags, reserved for now
+  // List of nodes to trace: a single one, the target
   out[offset++] = targetHash;
   return offset;
 }

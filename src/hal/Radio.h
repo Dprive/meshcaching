@@ -4,48 +4,49 @@
 #include "Board.h"
 #include "RxGain.h"
 
-// Enveloppe du SX1262 (RadioLib) : le câblage vient de la description de
-// carte, et la puissance TX s'exprime "à l'antenne" — le gain d'un
-// éventuel FEM externe est retranché avant d'être passé au SX1262.
+// SX1262 wrapper (RadioLib): the wiring comes from the board
+// description, and TX power is expressed "at the antenna" - the gain of
+// any external FEM is subtracted before being passed to the SX1262.
 //
-// La réception est pilotée par interruption : DIO1 lève un drapeau,
-// consommé tranquillement dans loop() via packetAvailable() (règle de
-// base avec RadioLib : jamais de traitement dans l'ISR elle-même).
+// Reception is interrupt-driven: DIO1 raises a flag, consumed at leisure
+// in loop() through packetAvailable() (basic rule with RadioLib: never
+// do any processing in the ISR itself).
 class Radio {
 public:
   explicit Radio(Board &board);
 
-  // Configure et met en écoute. Renvoie RADIOLIB_ERR_NONE si tout va bien.
+  // Configures and starts listening. Returns RADIOLIB_ERR_NONE if all
+  // went well.
   int16_t begin(float freqMhz, float bwKhz, uint8_t sf, uint8_t cr,
                 int8_t txPowerDbm);
 
-  // Puissance à l'antenne, bornée à la plage de la carte.
+  // Power at the antenna, clamped to the board range.
   void setTxPowerDbm(int8_t antennaDbm);
   int8_t txPowerDbm() const { return _antennaDbm; }
 
-  // Chaîne de gain en réception (boost interne du SX126x, LNA du FEM si
-  // la carte en a un, ou rien) ; remet la radio en écoute.
+  // Receive gain chain (SX126x internal boost, FEM LNA if the board has
+  // one, or nothing); puts the radio back into listening mode.
   void setRxGainMode(RxGainMode mode);
 
-  // Un cycle de CAD (LBT) : true si le canal est libre. Remet la radio
-  // en écoute et n'efface que le drapeau levé par le CAD lui-même — la
-  // boucle d'essais vit chez l'appelant, qui peut ainsi traiter un vrai
-  // paquet arrivé entre deux cycles au lieu de le perdre.
+  // One CAD (LBT) cycle: true if the channel is free. Puts the radio
+  // back into listening mode and clears only the flag raised by the CAD
+  // itself - the retry loop lives in the caller, which can thus handle a
+  // real packet that arrived between two cycles instead of losing it.
   bool channelClear();
 
-  // Émet puis repasse en écoute.
+  // Transmits then goes back to listening.
   int16_t transmit(const uint8_t *data, size_t len);
 
-  // RSSI instantané, lu sans perturber la réception en cours.
+  // Instantaneous RSSI, read without disturbing the ongoing reception.
   float rssiInstant() { return _lora.getRSSI(false); }
 
-  // true si un paquet est arrivé depuis le dernier appel
+  // true if a packet has arrived since the last call
   bool packetAvailable();
 
-  // Lit le paquet reçu puis remet la radio en écoute. len vaut 0 si le
-  // paquet était vide ou trop grand pour buf. rssi est le RssiPkt moyenné
-  // sur le paquet (bruit compris), despreadRssi le SignalRssiPkt estimé
-  // après désétalement du signal LoRa.
+  // Reads the received packet then puts the radio back into listening
+  // mode. len is 0 if the packet was empty or too large for buf. rssi is
+  // the RssiPkt averaged over the packet (noise included), despreadRssi
+  // the SignalRssiPkt estimated after despreading of the LoRa signal.
   int16_t readPacket(uint8_t *buf, size_t maxLen, size_t &len, float &rssi,
                      float &snr, float &despreadRssi);
 

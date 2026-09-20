@@ -1,7 +1,7 @@
 #ifdef BOARD_HELTEC_V3
 // =====================================================================
-// Heltec WiFi LoRa 32 V3 — ESP32-S3 + SX1262, OLED SSD1306 128x64 (I2C),
-// un seul bouton utilisateur (PRG).
+// Heltec WiFi LoRa 32 V3 - ESP32-S3 + SX1262, SSD1306 128x64 OLED (I2C),
+// a single user button (PRG).
 // =====================================================================
 #include <U8g2lib.h>
 
@@ -21,8 +21,8 @@ constexpr uint8_t kPinLoraDio1 = 14;
 constexpr uint8_t kPinOledSda = 17;
 constexpr uint8_t kPinOledScl = 18;
 constexpr uint8_t kPinOledReset = 21;
-constexpr uint8_t kPinVext = 36;      // alim de l'OLED, actif à l'état bas
-constexpr uint8_t kPinButtonPrg = 0;  // relié à la masse quand pressé
+constexpr uint8_t kPinVext = 36;      // OLED power rail, active low
+constexpr uint8_t kPinButtonPrg = 0;  // tied to ground when pressed
 
 const ButtonSpec kButtons[] = {
     {Key::Ok, kPinButtonPrg, /*activeLow=*/true, /*internalPullup=*/true},
@@ -34,7 +34,7 @@ public:
 
   void initPower() override {
     pinMode(kPinVext, OUTPUT);
-    digitalWrite(kPinVext, LOW);  // allume le rail Vext (OLED)
+    digitalWrite(kPinVext, LOW);  // turn the Vext rail (OLED) on
     delay(150);
   }
 
@@ -49,7 +49,7 @@ public:
     t.pins.sck = kPinLoraSck;
     t.pins.miso = kPinLoraMiso;
     t.pins.mosi = kPinLoraMosi;
-    t.dio2AsRfSwitch = true;  // DIO2 pilote le switch d'antenne
+    t.dio2AsRfSwitch = true;  // DIO2 drives the antenna switch
     t.tcxoVoltage = 1.8f;
     t.currentLimitmA = 140;
     return t;
@@ -63,7 +63,7 @@ public:
   }
 
 private:
-  // Le reset matériel de l'OLED (broche 21) est géré par U8g2 au begin()
+  // The OLED hardware reset (pin 21) is handled by U8g2 at begin()
   U8G2_SSD1306_128X64_NONAME_F_HW_I2C _u8g2{U8G2_R0, kPinOledReset,
                                             kPinOledScl, kPinOledSda};
   U8g2Display _display{_u8g2};

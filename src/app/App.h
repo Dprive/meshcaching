@@ -10,12 +10,12 @@
 #include "NoiseFloor.h"
 
 // =====================================================================
-// Application : géolocalisation d'un répéteur MeshCore.
+// Application: geolocating a MeshCore repeater.
 //
-// Affiche le RSSI et le temps écoulé depuis la dernière réception d'un
-// paquet provenant du répéteur cible, permet de le "pinger" avec un
-// paquet TRACE, et propose un menu de réglages persistés (répéteur
-// cible, puissance TX, gain RX).
+// Displays the RSSI and the time elapsed since the last packet received
+// from the target repeater, allows "pinging" it with a TRACE packet,
+// and offers a menu of persisted settings (target repeater, TX power,
+// RX gain).
 // =====================================================================
 class App {
 public:
@@ -25,12 +25,12 @@ public:
   void loop();
 
 private:
-  // Dernier paquet vu du répéteur cible
+  // Last packet seen from the target repeater
   struct RepeaterStatus {
     bool hasPacket = false;
     uint32_t lastSeenMs = 0;
-    float rssi = 0;          // RssiPkt, moyenné sur le paquet
-    float despreadRssi = 0;  // SignalRssiPkt, après désétalement
+    float rssi = 0;          // RssiPkt, averaged over the packet
+    float despreadRssi = 0;  // SignalRssiPkt, after despreading
     float snr = 0;
   };
 
@@ -48,22 +48,22 @@ private:
   StatusScreen _screen;
   SettingsMenu _menu;
 
-  // Séquence d'émission : LBT en cours, émission faite, ou canal resté
-  // occupé (abandon) — pilote le témoin en haut de l'écran.
+  // Transmit sequence: LBT running, transmission done, or channel left
+  // busy (aborted) - drives the indicator at the top of the screen.
   enum class TxPhase : uint8_t { Idle, Lbt, Tx, Busy };
 
   AppSettings _settings{};
   RepeaterStatus _target;
   NoiseFloor _noise;
-  // Tag de la dernière requête TRACE envoyée, et instant d'envoi :
-  // permet de reconnaître la réponse (qui renvoie ce même tag), et
-  // sert d'ancre au réarmement de l'émission (kTxCooldownMs).
+  // Tag of the last TRACE request sent, and the time it was sent:
+  // lets us recognize the reply (which echoes that same tag), and
+  // anchors the transmit cooldown (kTxCooldownMs).
   uint32_t _lastSentTag = 0;
   uint32_t _lastPingMs = 0;
   bool _hasPinged = false;
   TxPhase _txPhase = TxPhase::Idle;
   uint32_t _txPhaseSinceMs = 0;
-  // Départ du clignotement declenché par une réponse valide
+  // Start of the blink triggered by a valid reply
   uint32_t _rxFlashStartMs = 0;
   uint32_t _lastNoiseSampleMs = 0;
   uint32_t _lastDisplayRefreshMs = 0;

@@ -31,9 +31,9 @@ void SettingsMenu::open(const AppSettings &current) {
 
 SettingsMenu::Action SettingsMenu::translate(const ButtonEvent &event) const {
   if (!_hasDpad) {
-    // Bouton unique : appui long = valider ; clic court = item suivant en
-    // navigation, incrément en édition (digit hex, gain RX) — sauf la
-    // puissance, qui décrémente depuis son maximum (valeur de départ).
+    // Single button: long press = confirm; short click = next item in
+    // navigation, increment while editing (hex digit, RX gain) - except
+    // for the power, which counts down from its maximum (start value).
     if (event.key == Key::Ok) {
       if (event.longPress) {
         return Action::Select;
@@ -80,7 +80,7 @@ bool SettingsMenu::handleEvent(const ButtonEvent &event) {
 
 bool SettingsMenu::tickTimeout() {
   if (_open && millis() - _lastActivityMs >= kTimeoutMs) {
-    _open = false;  // les valeurs en cours (même mi-édition) sont gardées
+    _open = false;  // the current values (even mid-edit) are kept
     return true;
   }
   return false;
@@ -130,7 +130,7 @@ void SettingsMenu::handleEditTarget(Action action) {
       _digit = (_digit + 1) % kTargetDigits;
       break;
     case Action::Select:
-      // Valide le digit courant ; le dernier valide l'adresse entière
+      // Confirm the current digit; the last one confirms the address
       if (_digit + 1 < kTargetDigits) {
         _digit++;
       } else {
@@ -148,8 +148,8 @@ void SettingsMenu::handleEditTarget(Action action) {
 }
 
 void SettingsMenu::handleEditTxPower(Action action) {
-  // Plage utile de la carte : sur les V4 à FEM, le plancher remonte du
-  // gain du PA pour que la valeur affichée reste la puissance réelle.
+  // Useful range of the board: on V4 boards with a FEM, the floor is
+  // raised by the PA gain so the displayed value stays the real power.
   int8_t minDbm = _board.txPowerMinDbm();
   int8_t maxDbm = _board.txPowerMaxDbm();
   switch (action) {
@@ -212,7 +212,7 @@ void SettingsMenu::handleEditRxGain(Action action) {
 }
 
 void SettingsMenu::handleEditRssiDisplay(Action action) {
-  constexpr uint8_t kChoiceCount = 3;  // DEUX / RSSI / DESPREAD
+  constexpr uint8_t kChoiceCount = 3;  // BOTH / RSSI / DESPREAD
   uint8_t index = (uint8_t)_settings.rssiDisplay;
   switch (action) {
     case Action::Up:
@@ -264,7 +264,7 @@ const char *SettingsMenu::rssiDisplayLabel(RssiDisplayMode mode) {
 }
 
 // ---------------------------------------------------------------------
-// Rendu
+// Rendering
 // ---------------------------------------------------------------------
 
 void SettingsMenu::drawTitle(const char *title) {
@@ -299,7 +299,7 @@ void SettingsMenu::drawNav() {
   drawTitle("RÉGLAGES");
   char value[12];
   for (uint8_t i = 0; i < kItemCount; i++) {
-    int16_t y = 23 + i * 10;  // interligne serré : cinq items sur 64 px
+    int16_t y = 23 + i * 10;  // tight leading: five items within 64 px
     if (i == _cursor) {
       _d.drawText(0, y, ">");
     }
@@ -339,7 +339,7 @@ void SettingsMenu::drawEditTarget() {
     char digit[2] = {kHexDigits[nibble(i)], '\0'};
     _d.drawText(x0 + i * pitch, 45, digit);
   }
-  // Soulignement du digit en cours d'édition
+  // Underline the digit currently being edited
   _d.drawBox(x0 + _digit * pitch, 49, pitch - 6, 2);
   drawHint("OK: suivant/valider", "clic: +1  long: suiv.");
 }

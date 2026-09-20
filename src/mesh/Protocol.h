@@ -3,14 +3,13 @@
 #include <stdint.h>
 
 // =====================================================================
-// Format de paquet MeshCore (doc officielle meshcore-dev/MeshCore) :
-//   [header 1 octet] [transport_codes 0 ou 4 octets] [path_length 1 octet]
-//   [path 0-64 octets] [payload 0-184 octets]
+// MeshCore packet format (official meshcore-dev/MeshCore doc):
+//   [header 1 byte] [transport_codes 0 or 4 bytes] [path_length 1 byte]
+//   [path 0-64 bytes] [payload 0-184 bytes]
 // header = VV PPPP RR (version / payload type / route type)
 //
-// Module purement protocolaire : aucune dépendance matérielle, aucune
-// politique applicative (le choix de "qui est le répéteur cible" reste
-// dans l'application).
+// Pure protocol module: no hardware dependency, no application policy
+// (picking "which repeater is the target" stays in the application).
 // =====================================================================
 namespace meshcore {
 
@@ -20,14 +19,14 @@ constexpr uint8_t kRouteDirect = 0x02;
 constexpr uint8_t kRouteTransportDirect = 0x03;
 
 constexpr uint8_t kPayloadAdvert = 0x04;
-constexpr uint8_t kPayloadTrace = 0x09;  // "trace un chemin" : le ping natif de MeshCore
+constexpr uint8_t kPayloadTrace = 0x09;  // "trace a path": the native MeshCore ping
 
 constexpr size_t kMaxPacketLen = 256;
-constexpr size_t kAdvertPubkeyLen = 32;  // une annonce embarque la clé publique complète
+constexpr size_t kAdvertPubkeyLen = 32;  // an advert carries the full public key
 constexpr size_t kTracePingLen = 12;     // header + path_len + tag + auth + flags + 1 hash
 
-// Vue décodée d'un paquet : les pointeurs désignent le tampon d'origine,
-// rien n'est copié.
+// Decoded view of a packet: the pointers reference the original buffer,
+// nothing is copied.
 struct PacketView {
   uint8_t routeType;
   uint8_t payloadType;
@@ -38,27 +37,27 @@ struct PacketView {
   size_t payloadLen;
 };
 
-// Découpe un paquet brut. Renvoie false si le paquet est incohérent.
+// Parses a raw packet. Returns false if the packet is inconsistent.
 bool parse(const uint8_t *raw, size_t len, PacketView &out);
 
-// Identifiant du dernier nœud ayant émis ce paquet : dernier hash du
-// chemin ou, pour une annonce zéro-hop, la clé publique complète de
-// l'émetteur. Renvoie false si indéterminable : paquets TRACE (pas de
-// hash en tête de payload, cf. traceTag()) et tout autre paquet
-// zéro-hop — leur payload identifie le destinataire ou le canal, jamais
-// l'émetteur.
+// Identifier of the last node that sent this packet: last hash of the
+// path or, for a zero-hop advert, the full public key of the sender.
+// Returns false when undeterminable: TRACE packets (no hash at the head
+// of the payload, see traceTag()) and every other zero-hop packet -
+// their payload identifies the recipient or the channel, never the
+// sender.
 bool lastHopId(const PacketView &pkt, const uint8_t *&id, size_t &idLen);
 
-// Tag d'un paquet TRACE (false si le paquet n'en est pas un, ou est
-// trop court). C'est ce tag, renvoyé tel quel par le nœud tracé, qui
-// permet d'apparier une réponse à notre ping.
+// Tag of a TRACE packet (false if the packet is not one, or is too
+// short). This tag, echoed as-is by the traced node, is what lets a
+// reply be matched to our ping.
 bool traceTag(const PacketView &pkt, uint32_t &tag);
 
-// Construit un ping TRACE zéro-hop vers un seul nœud, identifié par le
-// premier octet du hash de sa clé publique. out doit faire au moins
-// kTracePingLen octets ; renvoie la taille écrite.
-// Format du payload (wiki MeshCore, "Companion Radio Protocol") :
-//   [tag 4o][auth_code 4o][flags 1o][liste de hash à tracer]
+// Builds a zero-hop TRACE ping to a single node, identified by the
+// first byte of its public key hash. out must be at least
+// kTracePingLen bytes long; returns the size written.
+// Payload format (MeshCore wiki, "Companion Radio Protocol"):
+//   [tag 4B][auth_code 4B][flags 1B][list of hashes to trace]
 size_t buildTracePing(uint8_t *out, uint32_t tag, uint8_t targetHash);
 
 }  // namespace meshcore

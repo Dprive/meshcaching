@@ -5,37 +5,37 @@
 #include "../hal/Display.h"
 #include "../hal/Settings.h"
 
-// État à afficher sur l'écran principal, composé par l'application.
+// State to render on the main screen, composed by the application.
 struct MainView {
-  const uint8_t *pubkeyPrefix;   // répéteur surveillé (bandeau)
+  const uint8_t *pubkeyPrefix;   // monitored repeater (header)
   size_t prefixLen;
-  bool rssiValid;                // false : logo de sommeil à la place du RSSI
-  float rssi;                    // RssiPkt, moyenné sur le paquet
-  float despreadRssi;            // SignalRssiPkt, après désétalement
-  RssiDisplayMode rssiDisplay;   // les deux côte à côte, ou une seule en grand
+  bool rssiValid;                // false: sleep logo instead of the RSSI
+  float rssi;                    // RssiPkt, averaged over the packet
+  float despreadRssi;            // SignalRssiPkt, after despreading
+  RssiDisplayMode rssiDisplay;   // both side by side, or a single large one
   float snr;
-  bool noiseValid;               // bruit de fond mesuré (médiane) dispo ?
+  bool noiseValid;               // measured noise floor (median) available?
   float noiseDbm;
-  const char *txBadge;           // témoin d'émission ("LBT", "TX",
-                                 // "OCCUPÉ"...) ; nullptr = rien
-  bool invert;                   // clignotement : trame inversée
-  uint32_t cooldownRemainingMs;  // avant la prochaine émission (0 = prêt)
+  const char *txBadge;           // transmit indicator ("LBT", "TX",
+                                 // "OCCUPÉ"...); nullptr = none
+  bool invert;                   // blinking: inverted frame
+  uint32_t cooldownRemainingMs;  // until the next transmission (0 = ready)
   uint32_t cooldownTotalMs;
 };
 
-// Écrans de l'application, dessinés via l'abstraction Display (OLED
-// U8g2 ou TFT selon la carte).
+// Application screens, drawn through the Display abstraction (U8g2
+// OLED or TFT depending on the board).
 class StatusScreen {
 public:
   explicit StatusScreen(Display &display) : _d(display) {}
 
   void showMessage(const char *line1, const char *line2 = "");
 
-  // Écran de démarrage : MESHCACHING en grand, version en dessous.
+  // Splash screen: MESHCACHING in large type, version underneath.
   void showSplash(const char *version);
 
-  // Écran principal : RSSI en grand tant qu'il est frais, sinon logo de
-  // sommeil (zZZ) ; témoin TX, barre de réarmement de l'émission, flash.
+  // Main screen: large RSSI while it is fresh, otherwise the sleep logo
+  // (zZZ); transmit indicator, transmit cooldown bar, flash.
   void drawMain(const MainView &view);
 
 private:

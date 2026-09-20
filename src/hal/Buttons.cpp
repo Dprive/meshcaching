@@ -32,7 +32,7 @@ bool Buttons::poll(ButtonEvent &event) {
         s.pressedAtMs = now;
         s.longFired = false;
       } else if (!s.longFired) {
-        event = {s.spec.key, false};  // clic court, émis au relâcher
+        event = {s.spec.key, false};  // short click, emitted on release
         return true;
       }
     }

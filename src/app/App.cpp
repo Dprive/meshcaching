@@ -9,8 +9,8 @@
 #include "../hal/SysRandom.h"
 #include "../mesh/Protocol.h"
 
-// Formate un float avec une décimale sans dépendre du %f de printf,
-// qui n'est pas fiable sur toutes les plateformes (nRF52 notamment).
+// Formats a float with one decimal without relying on printf's %f,
+// which is not reliable on every platform (nRF52 in particular).
 static void formatDb(float value, char *out, size_t outLen) {
   int v10 = (int)lroundf(value * 10.0f);
   snprintf(out, outLen, "%s%d.%c", v10 < 0 ? "-" : "", abs(v10) / 10,
@@ -25,14 +25,14 @@ App::App(Board &board)
 
 void App::loadSettings() {
   if (!settingsLoad(_settings)) {
-    // Premier démarrage (ou format incompatible) : défauts d'usine
+    // First boot (or incompatible format): factory defaults
     memcpy(_settings.targetPrefix, config::kTargetPubkeyPrefix,
            sizeof(_settings.targetPrefix));
     _settings.txPowerDbm = _board.txPowerDefaultDbm();
     _settings.rxGainMode = RxGainMode::kSxBoost;
     _settings.rssiDisplay = RssiDisplayMode::kRssiOnly;
   }
-  // Garde-fous, notamment si la config vient d'une autre carte
+  // Safety clamps, in particular if the config comes from another board
   if (_settings.txPowerDbm > _board.txPowerMaxDbm()) {
     _settings.txPowerDbm = _board.txPowerMaxDbm();
   }
@@ -59,8 +59,8 @@ void App::setup() {
   uint32_t splashStartMs = millis();
   _screen.showSplash(MESHCACHING_VERSION);
 
-  // Carte inattendue (p. ex. Heltec V4.2 flashé avec le build V4.3) :
-  // on s'arrête avant de toucher à la radio.
+  // Unexpected board (e.g. a Heltec V4.2 flashed with the V4.3 build):
+  // stop before touching the radio.
   if (const char *err = _board.selfCheckError()) {
     Serial.print(F("Incompatible board: "));
     Serial.println(err);
@@ -86,16 +86,16 @@ void App::setup() {
     char msg[16];
     snprintf(msg, sizeof(msg), "%d", state);
     _screen.showMessage("Erreur LoRa", msg);
-    while (true) {}  // sans radio, pas la peine de continuer
+    while (true) {}  // without a radio, no point going any further
   }
   _radio.setRxGainMode(_settings.rxGainMode);
   Serial.printf("TX power: %d dBm, RX gain: %u\n", _radio.txPowerDbm(),
                 (unsigned)_settings.rxGainMode);
 
   Serial.println(F("Waiting for MeshCore packets..."));
-  // Laisse l'écran de démarrage visible le temps voulu — l'init de la
-  // radio et de la config a tourné pendant ce temps — puis écran
-  // principal directement (logo de sommeil).
+  // Keep the splash screen visible for the intended time - the radio
+  // and config init ran meanwhile - then go straight to the main
+  // screen (sleep logo).
   while (millis() - splashStartMs < config::kSplashMs) {
     delay(10);
   }
@@ -117,16 +117,16 @@ void App::loop() {
     applyMenuResult();
   }
 
-  // Bruit de fond : échantillonnage continu du RSSI instantané — la
-  // radio reste en écoute, la lecture est non intrusive. Les paquets qui
-  // passent polluent quelques échantillons, la médiane les rejette.
+  // Noise floor: continuous sampling of the instantaneous RSSI - the
+  // radio stays in listen mode, the read is non-intrusive. Packets going
+  // through pollute a few samples, the median rejects them.
   if (millis() - _lastNoiseSampleMs >= config::kNoiseSampleIntervalMs) {
     _lastNoiseSampleMs = millis();
     _noise.addSample(_radio.rssiInstant());
   }
 
-  // Rafraîchit l'écran principal (animations, barre de réarmement) —
-  // jamais par-dessus le menu
+  // Refresh the main screen (animations, cooldown bar) - never on top
+  // of the menu
   if (!_menu.isOpen() &&
       millis() - _lastDisplayRefreshMs >= config::kDisplayRefreshMs) {
     _lastDisplayRefreshMs = millis();
@@ -140,8 +140,8 @@ void App::loop() {
 
 void App::handleMainEvent(const ButtonEvent &event) {
   if (event.key == Key::Ok && !event.longPress) {
-    // Ping TRACE forcé vers le répéteur cible, au lieu d'attendre
-    // passivement son prochain paquet
+    // Forced TRACE ping to the target repeater, instead of passively
+    // waiting for its next packet
     sendTracePing();
   } else if ((event.key == Key::Ok && event.longPress) ||
              (event.key == Key::Back && !event.longPress)) {
@@ -159,7 +159,7 @@ void App::applyMenuResult() {
   _radio.setTxPowerDbm(_settings.txPowerDbm);
   _radio.setRxGainMode(_settings.rxGainMode);
   if (targetChanged) {
-    // Nouveau répéteur suivi : on repart de zéro
+    // New repeater tracked: start over from scratch
     _target = RepeaterStatus();
     _lastSentTag = 0;
   }
@@ -179,8 +179,8 @@ void App::refreshDisplay() {
   MainView view;
   view.pubkeyPrefix = _settings.targetPrefix;
   view.prefixLen = sizeof(_settings.targetPrefix);
-  // Les dernières valeurs restent affichées jusqu'au paquet suivant ;
-  // le logo de sommeil n'apparaît qu'avant la toute première réception.
+  // The last values stay on screen until the next packet; the sleep
+  // logo only shows up before the very first reception.
   view.rssiValid = _target.hasPacket;
   view.rssi = _target.rssi;
   view.despreadRssi = _target.despreadRssi;
@@ -214,9 +214,10 @@ void App::refreshDisplay() {
   uint32_t sincePing = now - _lastPingMs;
   view.cooldownTotalMs = config::kTxCooldownMs;
   if (_txPhase == TxPhase::Lbt) {
-    // Barre pleine dès l'ordre d'émission et gelée pendant le LBT ; la
-    // décroissance ne démarre qu'à l'émission réelle (ancre _lastPingMs,
-    // posée après le LBT). Un abandon ne l'arme pas : elle disparaît.
+    // Bar full as soon as the transmit is ordered and frozen during the
+    // LBT; the decay only starts at the actual transmission (anchor
+    // _lastPingMs, set after the LBT). An abort does not arm it: it just
+    // disappears.
     view.cooldownRemainingMs = config::kTxCooldownMs;
   } else {
     view.cooldownRemainingMs = (_hasPinged && sincePing < config::kTxCooldownMs)
@@ -229,20 +230,20 @@ void App::refreshDisplay() {
 void App::sendTracePing() {
   uint32_t now = millis();
   if (_hasPinged && now - _lastPingMs < config::kTxCooldownMs) {
-    return;  // réarmement en cours : pas plus d'une émission par période
+    return;  // cooldown running: no more than one transmit per period
   }
 
-  // LBT : on n'émet que si le canal est libre. Contrairement à MeshCore,
-  // pas de TX forcé à la deadline : on abandonne et on l'affiche.
+  // LBT: transmit only if the channel is clear. Unlike MeshCore, no
+  // forced TX at the deadline: we abort and show it.
   _txPhase = TxPhase::Lbt;
   _txPhaseSinceMs = now;
   if (!_menu.isOpen()) {
-    refreshDisplay();  // témoin LBT pendant l'écoute bloquante
+    refreshDisplay();  // LBT indicator during the blocking listen
   }
   bool channelClear = false;
   for (;;) {
-    // Un vrai paquet a pu arriver pendant le slot d'attente (la radio
-    // reste en écoute) : on le traite au lieu de le perdre.
+    // A real packet may have arrived during the backoff slot (the radio
+    // stays in listen mode): handle it instead of losing it.
     if (_radio.packetAvailable()) {
       handleIncomingPacket();
     }
@@ -264,21 +265,21 @@ void App::sendTracePing() {
     if (!_menu.isOpen()) {
       refreshDisplay();
     }
-    return;  // rien n'a été émis : pas de réarmement
+    return;  // nothing was transmitted: no cooldown
   }
 
   uint8_t buf[meshcore::kTracePingLen];
-  uint32_t tag = sysRandom32();  // identifiant aléatoire de cette requête
+  uint32_t tag = sysRandom32();  // random identifier for this request
   size_t len =
       meshcore::buildTracePing(buf, tag, _settings.targetPrefix[0]);
 
-  _lastSentTag = tag;  // on retiendra ce tag pour reconnaître la réponse
+  _lastSentTag = tag;  // we will use this tag to recognize the reply
   _lastPingMs = millis();
   _hasPinged = true;
   _txPhase = TxPhase::Tx;
   _txPhaseSinceMs = _lastPingMs;
   if (!_menu.isOpen()) {
-    refreshDisplay();  // témoin TX et barre pleine, avant l'émission bloquante
+    refreshDisplay();  // TX indicator and full bar, before the blocking send
   }
 
   Serial.printf("Sending TRACE (tag=%08lX) to REPEATER %02X...\n",
@@ -296,8 +297,8 @@ bool App::packetComesFromTarget(const uint8_t *packet, size_t len) {
     return false;
   }
 
-  // Une réponse TRACE ne se reconnaît que par son tag, renvoyé tel quel :
-  // on la compare à notre dernier ping, dans la fenêtre de temps admise.
+  // A TRACE reply can only be recognized by its tag, echoed as-is: we
+  // compare it against our last ping, within the allowed time window.
   if (pkt.payloadType == meshcore::kPayloadTrace) {
     uint32_t tag;
     if (!meshcore::traceTag(pkt, tag) || _lastSentTag == 0) {
@@ -309,8 +310,8 @@ bool App::packetComesFromTarget(const uint8_t *packet, size_t len) {
     return tag == _lastSentTag;
   }
 
-  // Sinon : l'identifiant du dernier nœud émetteur, comparé au préfixe
-  // de clé publique du répéteur cible.
+  // Otherwise: the identifier of the last transmitting node, compared
+  // to the public key prefix of the target repeater.
   const uint8_t *id = nullptr;
   size_t idLen = 0;
   if (!meshcore::lastHopId(pkt, id, idLen)) {
@@ -330,9 +331,9 @@ void App::handleIncomingPacket() {
   if (len == 0) {
     return;
   }
-  // On ignore les paquets illisibles OU dont le CRC est invalide : un
-  // paquet corrompu ne doit jamais être interprété comme venant du
-  // répéteur cible (risque de fausse détection).
+  // Ignore packets that are unreadable OR whose CRC is invalid: a
+  // corrupted packet must never be interpreted as coming from the
+  // target repeater (risk of false detection).
   if (state != RADIOLIB_ERR_NONE) {
     if (state != RADIOLIB_ERR_CRC_MISMATCH) {
       Serial.print(F("Receive error: "));
@@ -357,9 +358,9 @@ void App::handleIncomingPacket() {
     _target.rssi = rssi;
     _target.despreadRssi = despreadRssi;
     _target.snr = snr;
-    _rxFlashStartMs = _target.lastSeenMs;  // déclenche le clignotement
+    _rxFlashStartMs = _target.lastSeenMs;  // triggers the blink
     if (!_menu.isOpen()) {
-      refreshDisplay();  // mise à jour immédiate de l'écran
+      refreshDisplay();  // immediate screen update
     }
   }
 }

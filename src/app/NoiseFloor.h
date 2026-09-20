@@ -1,11 +1,11 @@
 #pragma once
 #include <stddef.h>
 
-// Mesure du bruit de fond par cycles de 64 échantillons de RSSI
-// instantané : à chaque cycle complet, la médiane devient la valeur
-// courante et le cycle suivant démarre aussitôt (évaluation continue).
-// La médiane rejette naturellement les échantillons pris pendant le
-// passage d'un paquet, sans avoir à les détecter.
+// Noise floor measured in cycles of 64 instantaneous RSSI samples: on
+// every completed cycle the median becomes the current value and the
+// next cycle starts right away (continuous evaluation). The median
+// naturally rejects the samples taken while a packet was going
+// through, without having to detect them.
 class NoiseFloor {
 public:
   void addSample(float rssiDbm);

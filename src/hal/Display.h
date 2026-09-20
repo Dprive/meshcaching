@@ -2,19 +2,19 @@
 #include <stdint.h>
 
 // =====================================================================
-// Abstraction d'affichage de l'application : un repère logique de
-// 128x64 monochrome (blanc sur noir), quel que soit le panneau réel —
-// OLED piloté par U8g2 (cf. U8g2Display) ou TFT couleur (adaptateur
-// dans le fichier de carte concerné, p. ex. le ST7735 du Heltec T096).
-// Les écrans (ui/) ne connaissent que cette interface.
+// Display abstraction of the application: a logical 128x64 monochrome
+// frame (white on black), whatever the actual panel is - an OLED driven
+// by U8g2 (see U8g2Display) or a color TFT (adapter in the relevant
+// board file, e.g. the ST7735 of the Heltec T096).
+// The screens (ui/) only know about this interface.
 // =====================================================================
 
-// Jeu de polices logique, mappé par chaque adaptateur.
+// Logical font set, mapped by each adapter.
 enum class Font : uint8_t {
-  kSmall,   // 6x12 — texte courant, bandeau, hints
-  kMedium,  // ~12 px gras — titre du splash, Z moyen du logo
-  kMenu,    // 10x20 — valeurs du menu
-  kBig,     // ~24 px — RSSI, digits hex, grand Z
+  kSmall,   // 6x12 - body text, header bar, hints
+  kMedium,  // ~12 px bold - splash title, medium Z of the logo
+  kMenu,    // 10x20 - menu values
+  kBig,     // ~24 px - RSSI, hex digits, large Z
 };
 
 class Display {
@@ -23,13 +23,13 @@ public:
 
   virtual void begin() = 0;
 
-  // Dimensions du repère logique (les adaptateurs de panneaux plus
-  // grands centrent cette zone).
+  // Dimensions of the logical frame (adapters for larger panels
+  // center this area).
   uint16_t width() const { return 128; }
   uint16_t height() const { return 64; }
 
-  virtual void clear() = 0;  // efface la trame en composition
-  virtual void send() = 0;   // pousse la trame vers le panneau
+  virtual void clear() = 0;  // clears the frame being composed
+  virtual void send() = 0;   // pushes the frame to the panel
 
   virtual void setFont(Font font) = 0;
   virtual void drawText(int16_t x, int16_t y, const char *utf8) = 0;
@@ -37,8 +37,8 @@ public:
   virtual void drawBox(int16_t x, int16_t y, int16_t w, int16_t h) = 0;
   virtual void drawHLine(int16_t x, int16_t y, int16_t w) = 0;
 
-  // Encre inversée : dessine en couleur de fond (texte d'un badge plein)
+  // Inverted ink: draws in the background color (text of a solid badge)
   virtual void setInkInverted(bool inverted) = 0;
-  // Inverse toute la trame en composition (flash de réception)
+  // Inverts the whole frame being composed (receive flash)
   virtual void invertFrame() = 0;
 };

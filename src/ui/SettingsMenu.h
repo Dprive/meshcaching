@@ -6,18 +6,18 @@
 #include "../hal/Settings.h"
 
 // =====================================================================
-// Menu de réglages : répéteur cible (4 digits hex), puissance TX,
-// chaîne de gain RX (+ LNA FEM sur les cartes qui en ont un).
+// Settings menu: target repeater (4 hex digits), TX power, RX gain
+// chain (+ FEM LNA on the boards that have one).
 //
-// Pilotage selon les touches de la carte :
-//  - croix directionnelle (Wio Tracker L1) : Up/Down navigue ou modifie,
-//    Left/Right change de digit, Ok valide, Back annule l'édition ou
-//    sort du menu ;
-//  - bouton unique (Heltec) : clic = suivant / modifier, appui long =
-//    valider ; la sortie passe par l'item "Retour" ou le timeout.
+// Controls depend on the keys the board provides:
+//  - D-pad (Wio Tracker L1): Up/Down navigates or edits, Left/Right
+//    moves between digits, Ok confirms, Back cancels the edit or
+//    leaves the menu;
+//  - single button (Heltec): click = next / edit, long press =
+//    confirm; exiting goes through the "Retour" item or the timeout.
 //
-// Le menu travaille sur une copie : quand handleEvent()/tickTimeout()
-// renvoie true (fermeture), l'appelant applique et sauvegarde result().
+// The menu works on a copy: when handleEvent()/tickTimeout() returns
+// true (closing), the caller applies and saves result().
 // =====================================================================
 class SettingsMenu {
 public:
@@ -77,6 +77,6 @@ private:
   uint8_t _cursor = 0;
   uint8_t _digit = 0;
   AppSettings _settings{};
-  AppSettings _backup{};  // valeurs à restaurer si l'édition est annulée
+  AppSettings _backup{};  // values to restore if the edit is canceled
   uint32_t _lastActivityMs = 0;
 };
