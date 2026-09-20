@@ -51,7 +51,7 @@ void App::setup() {
   Serial.begin(115200);
   delay(200);
 
-  Serial.printf("MeshCaching %s — carte : %s\n", MESHCACHING_VERSION,
+  Serial.printf("MeshCaching %s - board: %s\n", MESHCACHING_VERSION,
                 _board.name());
 
   _board.initPower();
@@ -62,7 +62,7 @@ void App::setup() {
   // Carte inattendue (p. ex. Heltec V4.2 flashé avec le build V4.3) :
   // on s'arrête avant de toucher à la radio.
   if (const char *err = _board.selfCheckError()) {
-    Serial.print(F("Carte incompatible : "));
+    Serial.print(F("Incompatible board: "));
     Serial.println(err);
     _screen.showMessage("Carte incompatible", err);
     while (true) {}
@@ -73,15 +73,15 @@ void App::setup() {
   _buttons.begin(specs, buttonCount);
 
   loadSettings();
-  Serial.printf("Répéteur cible : %02X%02X\n", _settings.targetPrefix[0],
+  Serial.printf("Target repeater: %02X%02X\n", _settings.targetPrefix[0],
                 _settings.targetPrefix[1]);
 
-  Serial.println(F("Initialisation LoRa..."));
+  Serial.println(F("Initializing LoRa..."));
   int16_t state = _radio.begin(config::kLoraFreqMhz, config::kLoraBwKhz,
                                config::kLoraSf, config::kLoraCr,
                                _settings.txPowerDbm);
   if (state != RADIOLIB_ERR_NONE) {
-    Serial.print(F("Erreur LoRa : "));
+    Serial.print(F("LoRa error: "));
     Serial.println(state);
     char msg[16];
     snprintf(msg, sizeof(msg), "%d", state);
@@ -89,10 +89,10 @@ void App::setup() {
     while (true) {}  // sans radio, pas la peine de continuer
   }
   _radio.setRxGainMode(_settings.rxGainMode);
-  Serial.printf("Puissance TX : %d dBm, gain RX : %u\n", _radio.txPowerDbm(),
+  Serial.printf("TX power: %d dBm, RX gain: %u\n", _radio.txPowerDbm(),
                 (unsigned)_settings.rxGainMode);
 
-  Serial.println(F("En attente de paquets MeshCore..."));
+  Serial.println(F("Waiting for MeshCore packets..."));
   // Laisse l'écran de démarrage visible le temps voulu — l'init de la
   // radio et de la config a tourné pendant ce temps — puis écran
   // principal directement (logo de sommeil).
@@ -165,7 +165,7 @@ void App::applyMenuResult() {
   }
   if (changed) {
     settingsSave(_settings);
-    Serial.printf("Config sauvegardée : cible=%02X%02X TX=%ddBm gainRX=%u\n",
+    Serial.printf("Settings saved: target=%02X%02X TX=%ddBm rxGain=%u\n",
                   _settings.targetPrefix[0], _settings.targetPrefix[1],
                   _settings.txPowerDbm, (unsigned)_settings.rxGainMode);
   }
@@ -260,7 +260,7 @@ void App::sendTracePing() {
   if (!channelClear) {
     _txPhase = TxPhase::Busy;
     _txPhaseSinceMs = millis();
-    Serial.println(F("LBT : canal occupé, émission abandonnée"));
+    Serial.println(F("LBT: channel busy, transmission aborted"));
     if (!_menu.isOpen()) {
       refreshDisplay();
     }
@@ -281,11 +281,11 @@ void App::sendTracePing() {
     refreshDisplay();  // témoin TX et barre pleine, avant l'émission bloquante
   }
 
-  Serial.printf("Envoi TRACE (tag=%08lX) vers RÉPÉTEUR %02X...\n",
+  Serial.printf("Sending TRACE (tag=%08lX) to REPEATER %02X...\n",
                 (unsigned long)tag, _settings.targetPrefix[0]);
   int16_t state = _radio.transmit(buf, len);
   if (state != RADIOLIB_ERR_NONE) {
-    Serial.print(F("Erreur d'émission : "));
+    Serial.print(F("Transmit error: "));
     Serial.println(state);
   }
 }
@@ -335,7 +335,7 @@ void App::handleIncomingPacket() {
   // répéteur cible (risque de fausse détection).
   if (state != RADIOLIB_ERR_NONE) {
     if (state != RADIOLIB_ERR_CRC_MISMATCH) {
-      Serial.print(F("Erreur de réception : "));
+      Serial.print(F("Receive error: "));
       Serial.println(state);
     }
     return;
@@ -347,9 +347,9 @@ void App::handleIncomingPacket() {
   formatDb(despreadRssi, despreadStr, sizeof(despreadStr));
   formatDb(snr, snrStr, sizeof(snrStr));
   Serial.printf(
-      "Paquet reçu : len=%u RSSI=%s dBm despread=%s dBm SNR=%s dB %s\n",
+      "Packet received: len=%u RSSI=%s dBm despread=%s dBm SNR=%s dB %s\n",
       (unsigned)len, rssiStr, despreadStr, snrStr,
-      isTarget ? "[RÉPÉTEUR CIBLE]" : "");
+      isTarget ? "[TARGET REPEATER]" : "");
 
   if (isTarget) {
     _target.hasPacket = true;

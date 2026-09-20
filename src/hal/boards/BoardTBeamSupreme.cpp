@@ -91,24 +91,24 @@ int i2cReadByte0(TwoWire &bus, uint8_t addr) {
 
 void describeOledStatus(int status, char *buf, size_t len) {
   if (status < 0) {
-    snprintf(buf, len, "sans réponse");
+    snprintf(buf, len, "no response");
   } else {
-    snprintf(buf, len, "0x%02X (écran %s%s)", status,
-             (status & 0x40) ? "éteint" : "allumé",
-             (status & 0x80) ? ", occupé" : "");
+    snprintf(buf, len, "0x%02X (display %s%s)", status,
+             (status & 0x40) ? "off" : "on",
+             (status & 0x80) ? ", busy" : "");
   }
 }
 
 // Inventaire d'un bus I2C sur le port série (diagnostic)
 void logI2cScan(const char *label, TwoWire &bus) {
-  Serial.printf("I2C %s :", label);
+  Serial.printf("I2C %s:", label);
   bool any = false;
   for (uint8_t addr = 0x08; addr < 0x80; addr++) {
     if (!i2cAck(bus, addr)) continue;
     Serial.printf(" 0x%02X", addr);
     any = true;
   }
-  Serial.println(any ? "" : " aucun périphérique");
+  Serial.println(any ? "" : " no device");
 }
 
 void logRail(XPowersLibInterface &pmu, const char *name, uint8_t channel,
@@ -182,10 +182,10 @@ public:
     delay(150);  // stabilisation des rails avant l'init de l'OLED
 
     // État réel des rails (relu dans le PMU), pour le diagnostic
-    Serial.printf("PMU AXP2101 (ID 0x%02X) :", _pmu.getChipID());
+    Serial.printf("PMU AXP2101 (ID 0x%02X):", _pmu.getChipID());
     logRail(pmu, "DCDC1", XPOWERS_DCDC1, " (ESP32)");
     logRail(pmu, "ALDO1", XPOWERS_ALDO1, " (OLED)");
-    logRail(pmu, "ALDO2", XPOWERS_ALDO2, " (capteurs)");
+    logRail(pmu, "ALDO2", XPOWERS_ALDO2, " (sensors)");
     logRail(pmu, "ALDO3", XPOWERS_ALDO3, " (LoRa)");
     logRail(pmu, "ALDO4", XPOWERS_ALDO4, " (GNSS)");
     logRail(pmu, "BLDO1", XPOWERS_BLDO1, " (SD)");
@@ -193,8 +193,8 @@ public:
     logRail(pmu, "DCDC3", XPOWERS_DCDC3, "");
     logRail(pmu, "DCDC4", XPOWERS_DCDC4, "");
     logRail(pmu, "DCDC5", XPOWERS_DCDC5, "");
-    Serial.printf("\nPMU : VBUS %s, batterie %u mV\n",
-                  _pmu.isVbusIn() ? "oui" : "non",
+    Serial.printf("\nPMU: VBUS %s, battery %u mV\n",
+                  _pmu.isVbusIn() ? "yes" : "no",
                   (unsigned)_pmu.getBattVoltage());
 
     // Bus de l'OLED, démarré seulement maintenant : ses pull-ups sont sur
@@ -211,7 +211,7 @@ public:
   void beginDisplay() override {
     // Inventaire des deux bus (diagnostic : révision de la carte, adresses
     // de l'OLED et du magnétomètre, présence des capteurs)
-    logI2cScan("Wire (OLED, capteurs)", Wire);
+    logI2cScan("Wire (OLED, sensors)", Wire);
     logI2cScan("Wire1 (PMU)", Wire1);
 
     // On privilégie 0x3D : sur les cartes où l'OLED y est, le
@@ -234,9 +234,9 @@ public:
     }
     char status[48];
     describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
-    Serial.printf("OLED : %s -> adresse 0x%02X, état avant init %s\n",
-                  ackPrimary ? "0x3D répond"
-                             : ackAlternate ? "0x3C répond" : "aucune réponse I2C",
+    Serial.printf("OLED: %s -> address 0x%02X, status before init %s\n",
+                  ackPrimary ? "0x3D responds"
+                             : ackAlternate ? "0x3C responds" : "no I2C response",
                   addr, status);
 
     _u8g2.setI2CAddress(addr << 1);  // U8g2 attend l'adresse 8 bits
@@ -256,7 +256,7 @@ public:
     _u8g2.setPowerSave(0);
 
     describeOledStatus(i2cReadByte0(Wire, addr), status, sizeof(status));
-    Serial.printf("OLED : état après init %s\n", status);
+    Serial.printf("OLED: status after init %s\n", status);
   }
 
   RadioTraits radio() const override {

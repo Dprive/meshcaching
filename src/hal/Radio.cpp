@@ -83,7 +83,7 @@ int16_t Radio::begin(float freqMhz, float bwKhz, uint8_t sf, uint8_t cr,
       value |= 0x01;
       _lora.writeRegister(0x8B5, &value, 1);
     } else {
-      Serial.println(F("Patch RX 0x8B5 non appliqué (lecture échouée)"));
+      Serial.println(F("RX patch 0x8B5 not applied (register read failed)"));
     }
   }
 
