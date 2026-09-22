@@ -14,6 +14,7 @@
 #include <SPI.h>
 #include <U8g2_for_Adafruit_GFX.h>
 #include <Wire.h>
+#include <TAMC_GT911.h>
 #include <string.h>
 
 #include "../Board.h"
@@ -28,7 +29,7 @@
 #define TDECK_TRACKBALL_EDGES_PER_STEP 2
 #endif
 #ifndef TDECK_TRACKBALL_MIN_STEP_MS
-#define TDECK_TRACKBALL_MIN_STEP_MS 120
+#define TDECK_TRACKBALL_MIN_STEP_MS 30
 #endif
 #ifndef TDECK_DEBUG_INPUT
 #define TDECK_DEBUG_INPUT 0
@@ -58,6 +59,8 @@ constexpr uint8_t kPinTrackballLeft = 1;
 constexpr uint8_t kPinTrackballRight = 2;
 constexpr uint8_t kPinTrackballClick = 0;
 constexpr uint8_t kPinBatteryAdc = 4;
+constexpr uint8_t kPinTouchInt = 16;
+constexpr uint8_t kPinTouchRst = 21;
 
 // The UI assumes a 128x64 display. To fit the 320x240 TFT without a huge
 // memory footprint, we render to a 1-bit 128x64 canvas (1 KB) and upscale
@@ -155,6 +158,8 @@ class TDeckDisplay : public Display {
       frame[i] ^= 0xFF;
     }
   }
+
+  Adafruit_ST7789* tft() { return &_tft; }
 
  private:
   Adafruit_ST7789 _tft{&SPI, kPinTftCs, kPinTftDc, -1};
@@ -323,6 +328,8 @@ class TDeckBoard : public Board {
     return pollTrackball(now, event);
   }
 
+  Adafruit_ST7789* tft() { return _display.tft(); }
+
  private:
   enum class KeyboardState : uint8_t { Searching, Online, Absent };
 
@@ -357,6 +364,10 @@ class TDeckBoard : public Board {
         _keyboardErrors = 0;
         uint8_t code = (uint8_t)Wire.read();
         if (code == 0) return false;
+        
+        // Store for LVGL
+        _lastAscii = code;
+
 #if TDECK_DEBUG_INPUT
         Serial.printf("Keyboard: 0x%02X\n", (unsigned)code);
 #endif
@@ -375,39 +386,43 @@ class TDeckBoard : public Board {
 
   bool pollTrackball(uint32_t now, InputEvent &event) {
     if (now - _lastStepMs < TDECK_TRACKBALL_MIN_STEP_MS) {
-      clearTrackballEdges();
       return false;
     }
-    size_t best = kAxisCount;
-    uint16_t bestEdges = 0;
+    
+    // Evaluate axes sequentially to allow diagonal (firing one after another quickly)
     for (size_t i = 0; i < kAxisCount; i++) {
-      uint16_t edges = g_axes[i].edges;
-      if (edges > bestEdges) {
-        best = i;
-        bestEdges = edges;
+      if (g_axes[i].edges >= TDECK_TRACKBALL_EDGES_PER_STEP) {
+#if TDECK_DEBUG_INPUT
+        Serial.printf("Trackball: axis %u, %u edges\n", (unsigned)i, (unsigned)g_axes[i].edges);
+#endif
+        event.key = g_axes[i].key;
+        event.longPress = false;
+        
+        // Decrement only this axis
+        g_axes[i].edges -= TDECK_TRACKBALL_EDGES_PER_STEP;
+        
+        _lastStepMs = now;
+        _edgesSinceMs = 0;
+        return true;
       }
     }
-    if (best == kAxisCount) {
-      _edgesSinceMs = 0;
-      return false;
+    
+    // Timeout to clear jitter
+    bool active = false;
+    for (size_t i = 0; i < kAxisCount; i++) {
+      if (g_axes[i].edges > 0) active = true;
     }
-    if (_edgesSinceMs == 0) _edgesSinceMs = now;
-    if (bestEdges >= TDECK_TRACKBALL_EDGES_PER_STEP) {
-#if TDECK_DEBUG_INPUT
-      Serial.printf("Trackball: axis %u, %u edges\n", (unsigned)best,
-                    (unsigned)bestEdges);
-#endif
-      event.key = g_axes[best].key;
-      event.longPress = false;
-      clearTrackballEdges();
-      _lastStepMs = now;
-      _edgesSinceMs = 0;
-      return true;
-    }
-    if (now - _edgesSinceMs > kTrackballWindowMs) {
-      clearTrackballEdges();
+    
+    if (active) {
+      if (_edgesSinceMs == 0) _edgesSinceMs = now;
+      else if (now - _edgesSinceMs > kTrackballWindowMs) {
+        clearTrackballEdges();
+        _edgesSinceMs = 0;
+      }
+    } else {
       _edgesSinceMs = 0;
     }
+    
     return false;
   }
 
@@ -418,6 +433,10 @@ class TDeckBoard : public Board {
   uint32_t _lastStepMs = 0;
   uint32_t _edgesSinceMs = 0;
   TDeckDisplay _display;
+  
+public:
+  uint8_t _lastAscii = 0;
+  TAMC_GT911 _tp = TAMC_GT911(kPinI2cSda, kPinI2cScl, kPinTouchInt, kPinTouchRst, kPanelNativeW, kPanelNativeH);
 };
 
 }  // namespace
@@ -426,4 +445,47 @@ Board &board() {
   static TDeckBoard instance;
   return instance;
 }
+
+Adafruit_ST7789* getTDeckTFT() {
+  return static_cast<TDeckBoard*>(&board())->tft();
+}
+
+bool getTDeckTouch(int16_t &x, int16_t &y) {
+  TDeckBoard* tb = static_cast<TDeckBoard*>(&board());
+  tb->_tp.read();
+  if (tb->_tp.isTouched) {
+    // Manual calibration for Landscape (Rotation 3)
+    // T-Deck GT911 is natively 240x320.
+    int16_t raw_x = tb->_tp.points[0].x;
+    int16_t raw_y = tb->_tp.points[0].y;
+    
+    // In landscape (rotation 3), usually x and y are swapped
+    // The user mentioned touch is inverted.
+    x = 320 - raw_y;
+    y = raw_x;
+
+    // Safety bounds
+    if (x < 0) { x = 0; }
+    if (x > 319) { x = 319; }
+    if (y < 0) { y = 0; }
+    if (y > 239) { y = 239; }
+
+    return true;
+  }
+  return false;
+}
+
+uint8_t getTDeckKey() {
+  TDeckBoard* tb = static_cast<TDeckBoard*>(&board());
+  uint8_t k = tb->_lastAscii;
+  tb->_lastAscii = 0;
+  return k;
+}
+
+void initTDeckTouch() {
+  TDeckBoard* tb = static_cast<TDeckBoard*>(&board());
+  tb->_tp.begin();
+  // Do not use tp.setRotation(), we map manually above
+}
+
 #endif  // BOARD_TDECK

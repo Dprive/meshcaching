@@ -19,9 +19,13 @@ static void formatDb(float value, char *out, size_t outLen) {
 
 App::App(Board &board)
     : _board(board),
-      _radio(board),
-      _screen(board.display()),
+      _radio(board)
+#ifdef BOARD_TDECK
+      , _ui(board) {}
+#else
+      , _screen(board.display()),
       _menu(board.display(), board) {}
+#endif
 
 void App::loadSettings() {
   if (!settingsLoad(_settings)) {
@@ -57,14 +61,21 @@ void App::setup() {
   _board.initPower();
   _board.beginDisplay();
   uint32_t splashStartMs = millis();
+#ifdef BOARD_TDECK
+  _ui.setup();
+  _ui.showSplash(MESHCACHING_VERSION);
+#else
   _screen.showSplash(MESHCACHING_VERSION);
+#endif
 
   // Unexpected board (e.g. a Heltec V4.2 flashed with the V4.3 build):
   // stop before touching the radio.
   if (const char *err = _board.selfCheckError()) {
     Serial.print(F("Incompatible board: "));
     Serial.println(err);
+#ifndef BOARD_TDECK
     _screen.showMessage("Carte incompatible", err);
+#endif
     while (true) {}
   }
 
@@ -85,7 +96,9 @@ void App::setup() {
     Serial.println(state);
     char msg[16];
     snprintf(msg, sizeof(msg), "%d", state);
+#ifndef BOARD_TDECK
     _screen.showMessage("Erreur LoRa", msg);
+#endif
     while (true) {}  // without a radio, no point going any further
   }
   _radio.setRxGainMode(_settings.rxGainMode);
@@ -109,6 +122,12 @@ void App::loop() {
   ButtonEvent event;
   bool haveEvent = _buttons.poll(event);
   if (!haveEvent) {
+#ifdef BOARD_TDECK
+    if (_ui.wantsOpenSettings()) {
+      _ui.clearWantsOpenSettings();
+      _ui.open(_settings);
+    }
+#endif
     InputEvent input;
     if (_board.pollInput(input)) {
       event = {input.key, input.longPress};
@@ -116,6 +135,20 @@ void App::loop() {
     }
   }
   if (haveEvent) {
+#ifdef BOARD_TDECK
+    _ui.updateTrackball(event);
+    if (_ui.isOpen()) {
+      if (_ui.handleEvent(event)) {
+        applyMenuResult();
+      }
+    } else {
+      handleMainEvent(event);
+    }
+  }
+  if (_ui.isOpen() && _ui.tickTimeout()) {
+    applyMenuResult();
+  }
+#else
     if (_menu.isOpen()) {
       if (_menu.handleEvent(event)) {
         applyMenuResult();
@@ -127,6 +160,7 @@ void App::loop() {
   if (_menu.isOpen() && _menu.tickTimeout()) {
     applyMenuResult();
   }
+#endif
 
   // Noise floor: continuous sampling of the instantaneous RSSI - the
   // radio stays in listen mode, the read is non-intrusive. Packets going
@@ -138,7 +172,15 @@ void App::loop() {
 
   // Refresh the main screen (animations, cooldown bar) - never on top
   // of the menu
+#ifdef BOARD_TDECK
+  _ui.tick();
+  if (_ui.didClose()) {
+    applyMenuResult();
+  }
+  if (!_ui.isOpen() &&
+#else
   if (!_menu.isOpen() &&
+#endif
       millis() - _lastDisplayRefreshMs >= config::kDisplayRefreshMs) {
     _lastDisplayRefreshMs = millis();
     refreshDisplay();
@@ -156,12 +198,20 @@ void App::handleMainEvent(const ButtonEvent &event) {
     sendTracePing();
   } else if ((event.key == Key::Ok && event.longPress) ||
              (event.key == Key::Back && !event.longPress)) {
+#ifdef BOARD_TDECK
+    _ui.open(_settings);
+#else
     _menu.open(_settings);
+#endif
   }
 }
 
 void App::applyMenuResult() {
+#ifdef BOARD_TDECK
+  const AppSettings &updated = _ui.result();
+#else
   const AppSettings &updated = _menu.result();
+#endif
   bool changed = !settingsEqual(updated, _settings);
   bool targetChanged = memcmp(updated.targetPrefix, _settings.targetPrefix,
                               sizeof(_settings.targetPrefix)) != 0;
@@ -235,7 +285,11 @@ void App::refreshDisplay() {
                                    ? config::kTxCooldownMs - sincePing
                                    : 0;
   }
+#ifdef BOARD_TDECK
+  _ui.refreshMain(view);
+#else
   _screen.drawMain(view);
+#endif
 }
 
 void App::sendTracePing() {
@@ -248,7 +302,11 @@ void App::sendTracePing() {
   // forced TX at the deadline: we abort and show it.
   _txPhase = TxPhase::Lbt;
   _txPhaseSinceMs = now;
+#ifdef BOARD_TDECK
+  if (!_ui.isOpen()) {
+#else
   if (!_menu.isOpen()) {
+#endif
     refreshDisplay();  // LBT indicator during the blocking listen
   }
   bool channelClear = false;
@@ -273,7 +331,11 @@ void App::sendTracePing() {
     _txPhase = TxPhase::Busy;
     _txPhaseSinceMs = millis();
     Serial.println(F("LBT: channel busy, transmission aborted"));
+#ifdef BOARD_TDECK
+    if (!_ui.isOpen()) {
+#else
     if (!_menu.isOpen()) {
+#endif
       refreshDisplay();
     }
     return;  // nothing was transmitted: no cooldown
@@ -289,7 +351,11 @@ void App::sendTracePing() {
   _hasPinged = true;
   _txPhase = TxPhase::Tx;
   _txPhaseSinceMs = _lastPingMs;
+#ifdef BOARD_TDECK
+  if (!_ui.isOpen()) {
+#else
   if (!_menu.isOpen()) {
+#endif
     refreshDisplay();  // TX indicator and full bar, before the blocking send
   }
 
@@ -370,7 +436,11 @@ void App::handleIncomingPacket() {
     _target.despreadRssi = despreadRssi;
     _target.snr = snr;
     _rxFlashStartMs = _target.lastSeenMs;  // triggers the blink
+#ifdef BOARD_TDECK
+    if (!_ui.isOpen()) {
+#else
     if (!_menu.isOpen()) {
+#endif
       refreshDisplay();  // immediate screen update
     }
   }

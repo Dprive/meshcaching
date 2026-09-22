@@ -7,6 +7,9 @@
 #include "../hal/Settings.h"
 #include "../ui/SettingsMenu.h"
 #include "../ui/StatusScreen.h"
+#ifdef BOARD_TDECK
+#include "../ui/tdeck/TDeckUI.h"
+#endif
 #include "NoiseFloor.h"
 
 // =====================================================================
@@ -45,8 +48,12 @@ private:
   Board &_board;
   Radio _radio;
   Buttons _buttons;
+#ifdef BOARD_TDECK
+  TDeckUI _ui;
+#else
   StatusScreen _screen;
   SettingsMenu _menu;
+#endif
 
   // Transmit sequence: LBT running, transmission done, or channel left
   // busy (aborted) - drives the indicator at the top of the screen.
